@@ -1,0 +1,2009 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ThermoShelter — Dynamic Thermal Simulation & Passive Thermal Optimizer (Phase 2)</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2338BDF8' stroke-width='2'%3E%3Cpath d='M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6'/%3E%3C/svg%3E" />
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              950: '#060B13',
+              900: '#0B1322',
+              850: '#101B2E',
+              800: '#16233B',
+              700: '#233554',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- React & ReactDOM CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel for inline JSX compilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'JetBrains+Mono', monospace, ui-monospace;
+      background-color: #060B13;
+      color: #F8FAFC;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #020617; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    .animate-fadeIn { animation: fadeIn 0.2s ease-out forwards; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // ==========================================
+    // 1. CENTRAL CONFIGURATION WITH SOURCES
+    // ==========================================
+
+    const LEH_LADAKH_METADATA = {
+      locationName: 'Leh',
+      region: 'Ladakh (Cold High-Altitude Trans-Himalayan Region)',
+      country: 'India',
+      latitudeDegN: 34.15,
+      longitudeDegE: 77.58,
+      elevationMeters: 3500,
+      atmosphericPressureKPa: 65.8,
+      designScenario: 'Extreme Winter Cold-Clear Day',
+      designSeason: 'Mid-Winter (January Typical Design Day)',
+      minOutdoorTempC: -18.2,
+      maxOutdoorTempC: -1.8,
+      meanOutdoorTempC: -10.4,
+      peakSolarRadiationWm2: 785
+    };
+
+    const LEH_LADAKH_HOURLY_CLIMATE = [
+      { hour: 0,  timeLabel: '00:00', outdoorTempC: -15.4, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.2, relativeHumidityPct: 42 },
+      { hour: 1,  timeLabel: '01:00', outdoorTempC: -16.2, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.1, relativeHumidityPct: 43 },
+      { hour: 2,  timeLabel: '02:00', outdoorTempC: -16.9, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.0, relativeHumidityPct: 44 },
+      { hour: 3,  timeLabel: '03:00', outdoorTempC: -17.5, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.2, relativeHumidityPct: 45 },
+      { hour: 4,  timeLabel: '04:00', outdoorTempC: -17.9, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.4, relativeHumidityPct: 46 },
+      { hour: 5,  timeLabel: '05:00', outdoorTempC: -18.2, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.6, relativeHumidityPct: 46 },
+      { hour: 6,  timeLabel: '06:00', outdoorTempC: -18.0, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.8, relativeHumidityPct: 45 },
+      { hour: 7,  timeLabel: '07:00', outdoorTempC: -16.8, globalHorizontalSolarWm2: 45,  windSpeedMs: 3.5, relativeHumidityPct: 42 },
+      { hour: 8,  timeLabel: '08:00', outdoorTempC: -14.1, globalHorizontalSolarWm2: 210, windSpeedMs: 3.2, relativeHumidityPct: 38 },
+      { hour: 9,  timeLabel: '09:00', outdoorTempC: -10.5, globalHorizontalSolarWm2: 415, windSpeedMs: 3.6, relativeHumidityPct: 33 },
+      { hour: 10, timeLabel: '10:00', outdoorTempC: -6.8,  globalHorizontalSolarWm2: 580, windSpeedMs: 4.1, relativeHumidityPct: 30 },
+      { hour: 11, timeLabel: '11:00', outdoorTempC: -4.1,  globalHorizontalSolarWm2: 710, windSpeedMs: 4.5, relativeHumidityPct: 28 },
+      { hour: 12, timeLabel: '12:00', outdoorTempC: -2.3,  globalHorizontalSolarWm2: 785, windSpeedMs: 4.8, relativeHumidityPct: 27 },
+      { hour: 13, timeLabel: '13:00', outdoorTempC: -1.8,  globalHorizontalSolarWm2: 750, windSpeedMs: 5.2, relativeHumidityPct: 28 },
+      { hour: 14, timeLabel: '14:00', outdoorTempC: -2.5,  globalHorizontalSolarWm2: 620, windSpeedMs: 5.0, relativeHumidityPct: 30 },
+      { hour: 15, timeLabel: '15:00', outdoorTempC: -4.2,  globalHorizontalSolarWm2: 440, windSpeedMs: 4.7, relativeHumidityPct: 32 },
+      { hour: 16, timeLabel: '16:00', outdoorTempC: -7.0,  globalHorizontalSolarWm2: 230, windSpeedMs: 4.2, relativeHumidityPct: 35 },
+      { hour: 17, timeLabel: '17:00', outdoorTempC: -9.8,  globalHorizontalSolarWm2: 35,  windSpeedMs: 3.9, relativeHumidityPct: 38 },
+      { hour: 18, timeLabel: '18:00', outdoorTempC: -11.5, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.6, relativeHumidityPct: 40 },
+      { hour: 19, timeLabel: '19:00', outdoorTempC: -12.8, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.5, relativeHumidityPct: 41 },
+      { hour: 20, timeLabel: '20:00', outdoorTempC: -13.7, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.4, relativeHumidityPct: 41 },
+      { hour: 21, timeLabel: '21:00', outdoorTempC: -14.3, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.3, relativeHumidityPct: 42 },
+      { hour: 22, timeLabel: '22:00', outdoorTempC: -14.8, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.3, relativeHumidityPct: 42 },
+      { hour: 23, timeLabel: '23:00', outdoorTempC: -15.1, globalHorizontalSolarWm2: 0,   windSpeedMs: 3.2, relativeHumidityPct: 43 }
+    ];
+
+    const CENTRAL_ASSUMPTIONS = {
+      airDensity: { value: 0.88, unit: 'kg/m³', description: 'Dry air density at 3,500m elevation (65.8 kPa)', source: 'US Standard Atmosphere / Barometric Formula' },
+      airSpecificHeat: { value: 1005, unit: 'J/(kg·K)', description: 'Specific heat capacity of dry air (c_p)', source: 'ASHRAE Fundamentals' },
+      initialIndoorTemperature: { value: -5.0, unit: '°C', description: 'Starting indoor temperature at hour 0', source: 'Prototype assumption' },
+      groundTemperature: { value: 5.0, unit: '°C', description: 'Deep soil boundary temperature beneath floor', source: 'Prototype assumption' },
+      surfaceResistanceInsideWall: { value: 0.13, unit: 'm²·K/W', description: 'Internal wall surface resistance', source: 'ISO 6946 / IS 3792' },
+      surfaceResistanceOutsideWall: { value: 0.04, unit: 'm²·K/W', description: 'External wall surface resistance (wind)', source: 'ISO 6946 / IS 3792' },
+      surfaceResistanceInsideRoof: { value: 0.10, unit: 'm²·K/W', description: 'Internal roof surface resistance', source: 'ISO 6946 / IS 3792' },
+      surfaceResistanceOutsideRoof: { value: 0.04, unit: 'm²·K/W', description: 'External roof surface resistance', source: 'ISO 6946 / IS 3792' },
+      surfaceResistanceInsideFloor: { value: 0.17, unit: 'm²·K/W', description: 'Internal floor surface resistance', source: 'ISO 6946 / IS 3792' },
+      floorBaseResistance: { value: 1.80, unit: 'm²·K/W', description: 'Subgrade slab base conductive resistance', source: 'Prototype assumption' },
+      occupantSensibleHeat: { value: 100, unit: 'W/person', description: 'Sensible heat per occupant', source: 'ASHRAE Standard 55' },
+      achMapping: {
+        Low: { value: 0.5, unit: 'ACH', description: 'Weather-stripped tight envelope', source: 'Prototype assumption' },
+        Medium: { value: 1.5, unit: 'ACH', description: 'Standard alpine construction', source: 'Prototype assumption' },
+        High: { value: 3.0, unit: 'ACH', description: 'Leaky envelope or unsealed penetrations', source: 'Prototype assumption' }
+      },
+      thermalMassCapacitancePerM2Floor: {
+        Low: { value: 80000, unit: 'J/(m²·K)', description: 'Lightweight prefab container', source: 'Prototype assumption' },
+        Medium: { value: 250000, unit: 'J/(m²·K)', description: 'Standard masonry or AAC block', source: 'Prototype assumption' },
+        High: { value: 650000, unit: 'J/(m²·K)', description: 'Heavy rammed earth / stone masonry', source: 'Prototype assumption' }
+      },
+      orientationFactors: {
+        South: { value: 1.0, description: 'True South facade at 34°N winter', source: 'Prototype assumption' },
+        East: { value: 0.45, description: 'East morning solar flux', source: 'Prototype assumption' },
+        West: { value: 0.45, description: 'West afternoon solar flux', source: 'Prototype assumption' },
+        North: { value: 0.15, description: 'North diffuse-only flux', source: 'Prototype assumption' }
+      }
+    };
+
+    const WALL_MATERIALS = {
+      rammed_earth: {
+        id: 'rammed_earth',
+        name: 'Rammed Earth (Traditional Ladakh Pisé)',
+        thicknessM: 0.40,
+        thermalConductivityK: 1.10,
+        densityKgM3: 1950,
+        specificHeatJ_KgK: 920,
+        source: 'NBC 2016 Part 8 / BIS'
+      },
+      mud_brick: {
+        id: 'mud_brick',
+        name: 'Sun-Dried Mud Brick (Adobe / Kham-bu)',
+        thicknessM: 0.35,
+        thermalConductivityK: 0.85,
+        densityKgM3: 1650,
+        specificHeatJ_KgK: 880,
+        source: 'NBC 2016 Part 8 / BIS'
+      },
+      mountain_stone: {
+        id: 'mountain_stone',
+        name: 'Granitic Mountain Stone Masonry',
+        thicknessM: 0.45,
+        thermalConductivityK: 2.20,
+        densityKgM3: 2400,
+        specificHeatJ_KgK: 840,
+        source: 'NBC 2016 Part 8 / BIS'
+      },
+      puf_sandwich_panel: {
+        id: 'puf_sandwich_panel',
+        name: 'Insulated Sandwich Panel (PUF 100mm)',
+        thicknessM: 0.10,
+        thermalConductivityK: 0.024,
+        densityKgM3: 42,
+        specificHeatJ_KgK: 1400,
+        source: 'IS 12436'
+      },
+      autoclaved_aerated_concrete: {
+        id: 'autoclaved_aerated_concrete',
+        name: 'Autoclaved Aerated Concrete (AAC 200mm)',
+        thicknessM: 0.20,
+        thermalConductivityK: 0.18,
+        densityKgM3: 600,
+        specificHeatJ_KgK: 1000,
+        source: 'IS 2185 Part 3'
+      }
+    };
+
+    const ROOF_MATERIALS = {
+      traditional_mud_timber: {
+        id: 'traditional_mud_timber',
+        name: 'Traditional Ladakhi Timber & Mud Roof',
+        thicknessM: 0.25,
+        thermalConductivityK: 0.75,
+        source: 'Prototype assumption'
+      },
+      insulated_metal_sandwich: {
+        id: 'insulated_metal_sandwich',
+        name: 'Insulated Metal Sandwich Roof (PUF 120mm)',
+        thicknessM: 0.12,
+        thermalConductivityK: 0.024,
+        source: 'IS 12436'
+      },
+      light_steel_timber_hybrid: {
+        id: 'light_steel_timber_hybrid',
+        name: 'Light Steel + Timber Ceiling with EPS',
+        thicknessM: 0.15,
+        thermalConductivityK: 0.038,
+        source: 'NBC 2016 Part 8 / BIS'
+      }
+    };
+
+    const INSULATION_GRADES = {
+      Low: { id: 'Low', name: 'Low (25mm minimal air/straw)', thicknessM: 0.025, thermalConductivityK: 0.060, nominalR: 0.42 },
+      Medium: { id: 'Medium', name: 'Medium (75mm EPS Board)', thicknessM: 0.075, thermalConductivityK: 0.038, nominalR: 1.97 },
+      High: { id: 'High', name: 'High (150mm XPS Foam Core)', thicknessM: 0.150, thermalConductivityK: 0.030, nominalR: 5.00 }
+    };
+
+    const GLAZING_OPTIONS = {
+      single_clear: { id: 'single_clear', name: 'Single Glazing (4mm Clear)', uValueWm2K: 5.80, shgc: 0.82, source: 'ASHRAE Fundamentals' },
+      double_clear: { id: 'double_clear', name: 'Double Glazing (4-12-4 Clear)', uValueWm2K: 2.80, shgc: 0.70, source: 'ASHRAE Fundamentals' },
+      double_low_e: { id: 'double_low_e', name: 'Double Low-E Argon (4-16-4 Argon)', uValueWm2K: 1.40, shgc: 0.58, source: 'ASHRAE Fundamentals' }
+    };
+
+    const CANDIDATE_DESIGNS = [
+      {
+        id: 'candidate_trombe_optimal',
+        name: 'Passive Solar Trombe Outpost',
+        tagline: 'High Thermal Storage Rammed Earth + South Glazing',
+        notes: 'South 6.5m² Low-E glazing with 400mm rammed earth. High thermal capacitance dampens diurnal fluctuations.',
+        inputs: {
+          designTitle: 'Passive Solar Trombe Outpost',
+          lengthM: 6.5, widthM: 4.2, heightM: 2.8, orientation: 'South', occupants: 4,
+          wallMaterialId: 'rammed_earth', roofMaterialId: 'traditional_mud_timber',
+          insulationLevel: 'High', windowAreaM2: 6.5, glazingTypeId: 'double_low_e',
+          thermalMassLevel: 'High', airLeakageLevel: 'Low'
+        }
+      },
+      {
+        id: 'candidate_puf_defence_bunker',
+        name: 'Super-Insulated Prefab Bunkhouse',
+        tagline: 'Fast Deployable Modular Container with Low Infiltration',
+        notes: 'PUF sandwich panels (100mm) with tight envelope (0.5 ACH). Fast warm-up, rapid night cooling.',
+        inputs: {
+          designTitle: 'Super-Insulated Prefab Bunkhouse',
+          lengthM: 7.0, widthM: 3.2, heightM: 2.6, orientation: 'South', occupants: 6,
+          wallMaterialId: 'puf_sandwich_panel', roofMaterialId: 'insulated_metal_sandwich',
+          insulationLevel: 'High', windowAreaM2: 4.0, glazingTypeId: 'double_low_e',
+          thermalMassLevel: 'Low', airLeakageLevel: 'Low'
+        }
+      },
+      {
+        id: 'candidate_vernacular_adobe',
+        name: 'Modernized Ladakhi Adobe Residence',
+        tagline: 'Vernacular Sun-Dried Mud Brick with External Insulation',
+        notes: '350mm local mud brick walls with medium exterior insulation. Vernacular low embodied carbon.',
+        inputs: {
+          designTitle: 'Modernized Ladakhi Adobe Residence',
+          lengthM: 6.0, widthM: 4.0, heightM: 2.8, orientation: 'South', occupants: 4,
+          wallMaterialId: 'mud_brick', roofMaterialId: 'traditional_mud_timber',
+          insulationLevel: 'Medium', windowAreaM2: 5.0, glazingTypeId: 'double_clear',
+          thermalMassLevel: 'High', airLeakageLevel: 'Medium'
+        }
+      },
+      {
+        id: 'candidate_high_glazing_solarium',
+        name: 'Passive Direct-Gain Solarium',
+        tagline: 'Expansive South Glazing with Heavy Stone Floor Mass',
+        notes: '8.5m² window captures intense high-altitude solar flux; stone masonry absorbs day enthalpy.',
+        inputs: {
+          designTitle: 'Passive Direct-Gain Solarium',
+          lengthM: 7.2, widthM: 4.5, heightM: 3.0, orientation: 'South', occupants: 4,
+          wallMaterialId: 'mountain_stone', roofMaterialId: 'traditional_mud_timber',
+          insulationLevel: 'Medium', windowAreaM2: 8.5, glazingTypeId: 'double_clear',
+          thermalMassLevel: 'High', airLeakageLevel: 'Low'
+        }
+      },
+      {
+        id: 'candidate_uninsulated_baseline',
+        name: 'Uninsulated North Baseline (Control Spec)',
+        tagline: 'North-Facing Uninsulated Rubble Stone (Control Reference)',
+        notes: 'Zero direct winter solar gain, single pane glazing (U=5.8 W/m²K), high infiltration rate (3.0 ACH).',
+        inputs: {
+          designTitle: 'Uninsulated North Baseline (Control Spec)',
+          lengthM: 5.5, widthM: 3.8, heightM: 2.6, orientation: 'North', occupants: 2,
+          wallMaterialId: 'mountain_stone', roofMaterialId: 'traditional_mud_timber',
+          insulationLevel: 'Low', windowAreaM2: 3.0, glazingTypeId: 'single_clear',
+          thermalMassLevel: 'Medium', airLeakageLevel: 'High'
+        }
+      }
+    ];
+
+    // ==========================================
+    // 2. PHASE 2 DETERMINISTIC PHYSICS ENGINE
+    // ==========================================
+
+    function validateInputs(inputs) {
+      const errs = [];
+      if (!inputs.lengthM || inputs.lengthM <= 0) errs.push('Length must be greater than 0.');
+      if (!inputs.widthM || inputs.widthM <= 0) errs.push('Width must be greater than 0.');
+      if (!inputs.heightM || inputs.heightM <= 0) errs.push('Height must be greater than 0.');
+      if (inputs.windowAreaM2 < 0) errs.push('Window area must be >= 0.');
+      const gross = 2 * inputs.lengthM * inputs.heightM + 2 * inputs.widthM * inputs.heightM;
+      if (inputs.windowAreaM2 > gross) errs.push(`Window area (${inputs.windowAreaM2}m²) cannot exceed gross wall area (${gross.toFixed(1)}m²).`);
+      if (inputs.occupants < 0) errs.push('Occupants must be >= 0.');
+      return errs;
+    }
+
+    function runDeterministicSimulation(inputs) {
+      const L = Math.max(0.1, inputs.lengthM);
+      const W = Math.max(0.1, inputs.widthM);
+      const H = Math.max(0.1, inputs.heightM);
+
+      // Section 3: Geometry
+      const A_floor = L * W;
+      const V = L * W * H;
+      const A_wall_gross = 2 * L * H + 2 * W * H;
+      const A_window = Math.min(Math.max(0, inputs.windowAreaM2), A_wall_gross * 0.95);
+      const A_wall = Math.max(0, A_wall_gross - A_window);
+      const A_roof = L * W;
+
+      // Section 4: Thermal Resistance & U-Values
+      const wallMat = WALL_MATERIALS[inputs.wallMaterialId] || WALL_MATERIALS.rammed_earth;
+      const roofMat = ROOF_MATERIALS[inputs.roofMaterialId] || ROOF_MATERIALS.traditional_mud_timber;
+      const insGrade = INSULATION_GRADES[inputs.insulationLevel] || INSULATION_GRADES.Medium;
+      const glazing = GLAZING_OPTIONS[inputs.glazingTypeId] || GLAZING_OPTIONS.double_clear;
+
+      const R_wall = 0.13 + (wallMat.thicknessM / wallMat.thermalConductivityK) + (insGrade.thicknessM / insGrade.thermalConductivityK) + 0.04;
+      const U_wall = 1 / R_wall;
+
+      const R_roof = 0.10 + (roofMat.thicknessM / roofMat.thermalConductivityK) + (insGrade.thicknessM / insGrade.thermalConductivityK) + 0.04;
+      const U_roof = 1 / R_roof;
+
+      const R_floor = 0.17 + 1.80; // Ground slab
+      const U_floor = 1 / R_floor;
+      const U_window = glazing.uValueWm2K;
+
+      // Section 12: Thermal Mass Capacitance
+      const cMass = CENTRAL_ASSUMPTIONS.thermalMassCapacitancePerM2Floor[inputs.thermalMassLevel]?.value || 250000;
+      const C = (A_floor * cMass) + (V * 0.88 * 1005);
+
+      // Section 10: Ventilation ACH
+      const ach = CENTRAL_ASSUMPTIONS.achMapping[inputs.airLeakageLevel]?.value || 1.5;
+      const Vdot = (ach * V) / 3600; // m³/s
+
+      // Section 11: Internal Heat Gain
+      const Q_internal = Math.max(0, inputs.occupants) * 100; // 100 W/person
+
+      // Section 14: Initial Indoor Temp
+      let Tin = CENTRAL_ASSUMPTIONS.initialIndoorTemperature.value; // -5.0°C
+      const dt = 3600; // 1 hour step
+
+      const fOrient = CENTRAL_ASSUMPTIONS.orientationFactors[inputs.orientation]?.value || 0.5;
+
+      const hourlyData = [];
+      let sumIndoor = 0, minIndoor = Infinity, maxIndoor = -Infinity;
+      let sumOutdoor = 0, minOutdoor = Infinity, maxOutdoor = -Infinity;
+      let totalSolarJ = 0, totalLossJ = 0, maxHourlyLossW = 0;
+      let sumWallLossW = 0, sumRoofLossW = 0, sumFloorLossW = 0, sumWinLossW = 0, sumVentLossW = 0;
+
+      for (let h = 0; h < 24; h++) {
+        const clim = LEH_LADAKH_HOURLY_CLIMATE[h];
+        const Tout = clim.outdoorTempC;
+        const G = clim.globalHorizontalSolarWm2;
+
+        if (Tout < minOutdoor) minOutdoor = Tout;
+        if (Tout > maxOutdoor) maxOutdoor = Tout;
+        sumOutdoor += Tout;
+
+        // Section 5, 6, 7, 8: Heat Losses
+        const Q_wall = U_wall * A_wall * (Tin - Tout);
+        const Q_roof = U_roof * A_roof * (Tin - Tout);
+        const Q_floor = U_floor * A_floor * (Tin - 5.0); // Tground = 5°C
+        const Q_window = U_window * A_window * (Tin - Tout);
+        // Section 10: Ventilation Loss
+        const Q_vent = 0.88 * 1005 * Vdot * (Tin - Tout);
+
+        // Section 9: Solar Gain
+        const Q_solar = G * A_window * glazing.shgc * fOrient;
+
+        const totalGain = Q_solar + Q_internal;
+        const totalLoss = Q_wall + Q_roof + Q_floor + Q_window + Q_vent;
+        const netHeatFlow = totalGain - totalLoss;
+
+        if (totalLoss > maxHourlyLossW) maxHourlyLossW = totalLoss;
+        totalSolarJ += Q_solar * dt;
+        totalLossJ += Math.max(0, totalLoss) * dt;
+
+        sumWallLossW += Math.max(0, Q_wall);
+        sumRoofLossW += Math.max(0, Q_roof);
+        sumFloorLossW += Math.max(0, Q_floor);
+        sumWinLossW += Math.max(0, Q_window);
+        sumVentLossW += Math.max(0, Q_vent);
+
+        const roundedTin = Math.round(Tin * 10) / 10;
+        sumIndoor += roundedTin;
+        if (roundedTin < minIndoor) minIndoor = roundedTin;
+        if (roundedTin > maxIndoor) maxIndoor = roundedTin;
+
+        hourlyData.push({
+          hour: clim.hour,
+          timeLabel: clim.timeLabel,
+          outdoorTempC: Math.round(Tout * 10) / 10,
+          solarIrradianceWm2: Math.round(G),
+          indoorTempC: roundedTin,
+          solarGainW: Math.round(Q_solar),
+          internalGainW: Math.round(Q_internal),
+          wallLossW: Math.round(Q_wall),
+          roofLossW: Math.round(Q_roof),
+          floorLossW: Math.round(Q_floor),
+          windowLossW: Math.round(Q_window),
+          ventilationLossW: Math.round(Q_vent),
+          totalGainW: Math.round(totalGain),
+          totalLossW: Math.round(totalLoss),
+          netHeatFlowW: Math.round(netHeatFlow)
+        });
+
+        // Discrete-time ODE step: C * dTin/dt = netHeatFlow
+        Tin += (netHeatFlow * dt) / C;
+      }
+
+      const avgIndoor = Math.round((sumIndoor / 24) * 10) / 10;
+      const avgOutdoor = Math.round((sumOutdoor / 24) * 10) / 10;
+      const totalHeatLossKWh = Math.round((totalLossJ / 3600000) * 10) / 10;
+      const totalSolarGainKWh = Math.round((totalSolarJ / 3600000) * 10) / 10;
+
+      const sumLosses = Math.max(1, sumWallLossW + sumRoofLossW + sumFloorLossW + sumWinLossW + sumVentLossW);
+      const wallsPct = Math.round((sumWallLossW / sumLosses) * 100);
+      const roofPct = Math.round((sumRoofLossW / sumLosses) * 100);
+      const floorPct = Math.round((sumFloorLossW / sumLosses) * 100);
+      const windowPct = Math.round((sumWinLossW / sumLosses) * 100);
+      const ventilationPct = Math.max(0, 100 - (wallsPct + roofPct + floorPct + windowPct));
+
+      return {
+        minIndoorTempC: minIndoor,
+        maxIndoorTempC: maxIndoor,
+        avgIndoorTempC: avgIndoor,
+        minOutdoorTempC: minOutdoor,
+        maxOutdoorTempC: maxOutdoor,
+        avgOutdoorTempC: avgOutdoor,
+        totalHeatLossKWh,
+        totalSolarGainKWh,
+        maxHourlyHeatLossW: Math.round(maxHourlyLossW),
+        geometry: { floorAreaM2: A_floor, volumeM3: V, grossWallAreaM2: A_wall_gross, opaqueWallAreaM2: A_wall, roofAreaM2: A_roof, windowAreaM2: A_window },
+        envelopeUValues: {
+          uWallWm2K: Math.round(U_wall * 1000) / 1000,
+          uRoofWm2K: Math.round(U_roof * 1000) / 1000,
+          uFloorWm2K: Math.round(U_floor * 1000) / 1000,
+          uWindowWm2K: Math.round(U_window * 1000) / 1000
+        },
+        effectiveThermalCapacitanceJK: Math.round(C),
+        heatLossBreakdown: { wallsPct, roofPct, floorPct, windowPct, ventilationPct },
+        hourlyData
+      };
+    }
+
+    // ==========================================
+    // PHASE 3 OPTIMIZATION ENGINE & CONFIG
+    // ==========================================
+
+    const OPTIMIZATION_CONFIG = {
+      targetIndoorTempC: 15.0,
+      minWindowWallRatio: 0.06,
+      maxWindowWallRatio: 0.35,
+      minIndoorTempConstraintC: -12.0,
+      weights: {
+        thermalCondition: 0.25,
+        heatLoss: 0.25,
+        temperatureStability: 0.15,
+        solarGain: 0.15,
+        heatingDemand: 0.20
+      }
+    };
+
+    function calculateHeatingDemandProxy(sim, targetTempC = 15.0) {
+      const geo = sim.geometry;
+      const u = sim.envelopeUValues;
+      const UA_envelope = u.uWallWm2K * geo.opaqueWallAreaM2 + u.uRoofWm2K * geo.roofAreaM2 + u.uFloorWm2K * geo.floorAreaM2 + u.uWindowWm2K * geo.windowAreaM2;
+      let totalHeatingJoules = 0;
+      for (const h of sim.hourlyData) {
+        if (h.indoorTempC < targetTempC) {
+          const deltaTDef = targetTempC - h.indoorTempC;
+          const deltaTEnv = Math.max(0.1, h.indoorTempC - h.outdoorTempC);
+          const ventCond = h.ventilationLossW > 0 ? h.ventilationLossW / deltaTEnv : 0;
+          totalHeatingJoules += deltaTDef * (UA_envelope + ventCond) * 3600;
+        }
+      }
+      return Math.round((totalHeatingJoules / 3600000) * 10) / 10;
+    }
+
+    function generateCandidateConfigurations(baseline) {
+      const L = baseline.lengthM, W = baseline.widthM, H = baseline.heightM, occupants = baseline.occupants;
+      const facadeArea = L * H;
+      const winSmall = Math.round(facadeArea * 0.08 * 10) / 10;
+      const winMedium = Math.round(facadeArea * 0.16 * 10) / 10;
+      const winLarge = Math.round(facadeArea * 0.26 * 10) / 10;
+      const winMax = Math.round(facadeArea * 0.35 * 10) / 10;
+
+      const archetypes = [
+        { id: 'c1', name: 'Optimized Rammed Earth Trombe Solarium', tagline: 'High Thermal Inertia + South Glazing + Heavy Insulation', orientation: 'South', wall: 'rammed_earth', roof: 'traditional_mud_timber', ins: 'High', win: winLarge, glaze: 'double_low_e', mass: 'High', leak: 'Low' },
+        { id: 'c2', name: 'Vernacular Rammed Earth Balanced Spec', tagline: 'Traditional Earth Walls + Medium Insulation + Double Glazing', orientation: 'South', wall: 'rammed_earth', roof: 'traditional_mud_timber', ins: 'Medium', win: winMedium, glaze: 'double_clear', mass: 'High', leak: 'Medium' },
+        { id: 'c3', name: 'Super-Insulated Prefabricated Bunkhouse', tagline: 'Modular PUF Sandwich Panels + Double Low-E + Tight Envelope', orientation: 'South', wall: 'puf_sandwich_panel', roof: 'insulated_metal_sandwich', ins: 'High', win: winMedium, glaze: 'double_low_e', mass: 'Low', leak: 'Low' },
+        { id: 'c4', name: 'PUF High-Altitude Arctic Pod', tagline: 'PUF Envelope + Triple Clear Glazing + Low Infiltration', orientation: 'South', wall: 'puf_sandwich_panel', roof: 'insulated_metal_sandwich', ins: 'High', win: winLarge, glaze: 'triple_clear', mass: 'Low', leak: 'Low' },
+        { id: 'c5', name: 'Modernized Ladakhi Mud-Brick Outpost', tagline: 'Sun-Dried Mud Brick + High Insulation + South Low-E', orientation: 'South', wall: 'mud_brick', roof: 'traditional_mud_timber', ins: 'High', win: winLarge, glaze: 'double_low_e', mass: 'High', leak: 'Low' },
+        { id: 'c6', name: 'Standard Mud-Brick Solar Dwelling', tagline: 'Mud Brick Walls + Medium Insulation + Standard Double Glazing', orientation: 'South', wall: 'mud_brick', roof: 'traditional_mud_timber', ins: 'Medium', win: winMedium, glaze: 'double_clear', mass: 'High', leak: 'Medium' },
+        { id: 'c7', name: 'Insulated Mountain Stone Vault', tagline: 'High-Density Granite Stone + High Insulation + Low-E South Glazing', orientation: 'South', wall: 'mountain_stone', roof: 'traditional_mud_timber', ins: 'High', win: winLarge, glaze: 'double_low_e', mass: 'High', leak: 'Low' },
+        { id: 'c8', name: 'Mountain Stone Moderate Shelter', tagline: 'Rubble Stone + Medium Insulation + Double Glazing', orientation: 'South', wall: 'mountain_stone', roof: 'traditional_mud_timber', ins: 'Medium', win: winMedium, glaze: 'double_clear', mass: 'Medium', leak: 'Medium' },
+        { id: 'c9', name: 'East-Oriented Morning Solar Shelter', tagline: 'East Facade Glazing for Rapid Dawn Heating', orientation: 'East', wall: 'rammed_earth', roof: 'traditional_mud_timber', ins: 'High', win: winLarge, glaze: 'double_low_e', mass: 'High', leak: 'Low' },
+        { id: 'c10', name: 'West-Oriented Afternoon Solar Shelter', tagline: 'West Facade Glazing + Medium Mud Brick Mass', orientation: 'West', wall: 'mud_brick', roof: 'traditional_mud_timber', ins: 'Medium', win: winMedium, glaze: 'double_clear', mass: 'High', leak: 'Medium' },
+        { id: 'c11', name: 'North-Oriented Shaded Outpost', tagline: 'North-Facing PUF Pod (Diffuse Solar Gain Only)', orientation: 'North', wall: 'puf_sandwich_panel', roof: 'insulated_metal_sandwich', ins: 'High', win: winSmall, glaze: 'double_low_e', mass: 'Low', leak: 'Low' },
+        { id: 'c12', name: 'High-Glazing Direct Gain Solarium', tagline: 'Maximum Feasible South Window (35% Facade) + High Thermal Mass', orientation: 'South', wall: 'rammed_earth', roof: 'traditional_mud_timber', ins: 'High', win: winMax, glaze: 'double_low_e', mass: 'High', leak: 'Low' },
+        { id: 'c13', name: 'Minimal Glazing Thermal Fortress', tagline: 'Small Fenestration Aperture (8%) to Minimize Conduction Loss', orientation: 'South', wall: 'puf_sandwich_panel', roof: 'insulated_metal_sandwich', ins: 'High', win: winSmall, glaze: 'double_low_e', mass: 'Low', leak: 'Low' },
+        { id: 'c14', name: 'Hybrid Metal Clad Mass Shelter', tagline: 'Insulated Metal Roof + Rammed Earth Walls + Triple Glazing', orientation: 'South', wall: 'rammed_earth', roof: 'insulated_metal_sandwich', ins: 'High', win: winLarge, glaze: 'triple_clear', mass: 'High', leak: 'Low' },
+        { id: 'c15', name: 'Mud Brick with Single Clear Glazing', tagline: 'Traditional Mud Brick + Low Insulation + Single Pane (U=5.8 W/m²K)', orientation: 'South', wall: 'mud_brick', roof: 'traditional_mud_timber', ins: 'Low', win: winMedium, glaze: 'single_clear', mass: 'Medium', leak: 'Medium' },
+        { id: 'c16', name: 'Uninsulated North Stone Control', tagline: 'North-Facing Uninsulated Rubble Stone (Control Reference)', orientation: 'North', wall: 'mountain_stone', roof: 'traditional_mud_timber', ins: 'Low', win: winSmall, glaze: 'single_clear', mass: 'Medium', leak: 'High' },
+        { id: 'c17', name: 'Drafty Rammed Earth Outpost', tagline: 'Rammed Earth + High Infiltration (3.0 ACH) + Low Insulation', orientation: 'South', wall: 'rammed_earth', roof: 'traditional_mud_timber', ins: 'Low', win: winMedium, glaze: 'single_clear', mass: 'High', leak: 'High' },
+        { id: 'c18', name: 'East-Facing Prefab Container', tagline: 'PUF Sandwich Panels + East Orientation + Double Clear Glazing', orientation: 'East', wall: 'puf_sandwich_panel', roof: 'insulated_metal_sandwich', ins: 'Medium', win: winMedium, glaze: 'double_clear', mass: 'Low', leak: 'Medium' },
+        { id: 'c19', name: 'East-Facing Adobe Cabin', tagline: 'Mud Brick Walls + East Facing Window + Medium Insulation', orientation: 'East', wall: 'mud_brick', roof: 'traditional_mud_timber', ins: 'Medium', win: winLarge, glaze: 'double_clear', mass: 'High', leak: 'Medium' },
+        { id: 'c20', name: 'West-Facing Granite Outpost', tagline: 'Mountain Stone + West Facing + Medium Insulation', orientation: 'West', wall: 'mountain_stone', roof: 'traditional_mud_timber', ins: 'Medium', win: winMedium, glaze: 'double_clear', mass: 'Medium', leak: 'Medium' },
+        { id: 'c21', name: 'West-Facing Insulated Pod', tagline: 'PUF Panel + West Orientation + Double Low-E', orientation: 'West', wall: 'puf_sandwich_panel', roof: 'insulated_metal_sandwich', ins: 'High', win: winLarge, glaze: 'double_low_e', mass: 'Low', leak: 'Low' },
+        { id: 'c22', name: 'Advanced Glazed Rammed Earth Pod', tagline: 'Rammed Earth + Triple Clear Glazing + Medium Insulation', orientation: 'South', wall: 'rammed_earth', roof: 'traditional_mud_timber', ins: 'Medium', win: winMedium, glaze: 'triple_clear', mass: 'High', leak: 'Low' },
+        { id: 'c23', name: 'Adobe Passive Sun-Harvester', tagline: 'Mud Brick + Large South Low-E Glazing (35%) + High Insulation', orientation: 'South', wall: 'mud_brick', roof: 'traditional_mud_timber', ins: 'High', win: winMax, glaze: 'double_low_e', mass: 'High', leak: 'Low' },
+        { id: 'c24', name: 'Granite Mass Passive Shelter', tagline: 'Mountain Stone + Triple Glazing + High Insulation + South Facing', orientation: 'South', wall: 'mountain_stone', roof: 'traditional_mud_timber', ins: 'High', win: winLarge, glaze: 'triple_clear', mass: 'High', leak: 'Low' }
+      ];
+
+      return archetypes.map(a => ({
+        id: a.id,
+        name: a.name,
+        tagline: a.tagline,
+        inputs: {
+          designTitle: a.name,
+          lengthM: L,
+          widthM: W,
+          heightM: H,
+          orientation: a.orientation,
+          occupants: occupants,
+          wallMaterialId: a.wall,
+          roofMaterialId: a.roof,
+          insulationLevel: a.ins,
+          windowAreaM2: a.win,
+          glazingTypeId: a.glaze,
+          thermalMassLevel: a.mass,
+          airLeakageLevel: a.leak
+        }
+      }));
+    }
+
+    function runDesignOptimization(baselineInputs) {
+      const baselineSim = runDeterministicSimulation(baselineInputs);
+      const baselineHeatProxy = calculateHeatingDemandProxy(baselineSim);
+      const rawCandidates = generateCandidateConfigurations(baselineInputs);
+
+      const intermediate = rawCandidates.map(c => {
+        const sim = runDeterministicSimulation(c.inputs);
+        const heatProxy = calculateHeatingDemandProxy(sim);
+        const swing = Math.round((sim.maxIndoorTempC - sim.minIndoorTempC) * 10) / 10;
+        const isFeasible = c.inputs.windowAreaM2 >= 0 && sim.minIndoorTempC >= OPTIMIZATION_CONFIG.minIndoorTempConstraintC;
+        return { candidate: c, sim, heatProxy, swing, isFeasible };
+      });
+
+      const allPool = [
+        { sim: baselineSim, heatProxy: baselineHeatProxy, swing: Math.round((baselineSim.maxIndoorTempC - baselineSim.minIndoorTempC) * 10) / 10 },
+        ...intermediate.map(i => ({ sim: i.sim, heatProxy: i.heatProxy, swing: i.swing }))
+      ];
+
+      const minLoss = Math.min(...allPool.map(p => p.sim.totalHeatLossKWh));
+      const maxLoss = Math.max(...allPool.map(p => p.sim.totalHeatLossKWh));
+      const minSolar = Math.min(...allPool.map(p => p.sim.totalSolarGainKWh));
+      const maxSolar = Math.max(...allPool.map(p => p.sim.totalSolarGainKWh));
+      const minAvg = Math.min(...allPool.map(p => p.sim.avgIndoorTempC));
+      const maxAvg = Math.max(...allPool.map(p => p.sim.avgIndoorTempC));
+      const minMin = Math.min(...allPool.map(p => p.sim.minIndoorTempC));
+      const maxMin = Math.max(...allPool.map(p => p.sim.minIndoorTempC));
+      const minSwing = Math.min(...allPool.map(p => p.swing));
+      const maxSwing = Math.max(...allPool.map(p => p.swing));
+      const minReq = Math.min(...allPool.map(p => p.heatProxy));
+      const maxReq = Math.max(...allPool.map(p => p.heatProxy));
+
+      const w = OPTIMIZATION_CONFIG.weights;
+
+      function calcScore(sim, swing, heatProxy) {
+        const normAvg = (sim.avgIndoorTempC - minAvg) / Math.max(0.001, maxAvg - minAvg);
+        const normMin = (sim.minIndoorTempC - minMin) / Math.max(0.001, maxMin - minMin);
+        const condNorm = Math.max(0, Math.min(1, 0.5 * normAvg + 0.5 * normMin));
+        const lossNorm = Math.max(0, Math.min(1, (maxLoss - sim.totalHeatLossKWh) / Math.max(0.001, maxLoss - minLoss)));
+        const stabNorm = Math.max(0, Math.min(1, (maxSwing - swing) / Math.max(0.001, maxSwing - minSwing)));
+        const solNorm = Math.max(0, Math.min(1, (sim.totalSolarGainKWh - minSolar) / Math.max(0.001, maxSolar - minSolar)));
+        const heatNorm = Math.max(0, Math.min(1, (maxReq - heatProxy) / Math.max(0.001, maxReq - minReq)));
+
+        const score = Math.round((w.thermalCondition * condNorm + w.heatLoss * lossNorm + w.temperatureStability * stabNorm + w.solarGain * solNorm + w.heatingDemand * heatNorm) * 1000) / 10;
+        return { score, components: { thermalCondition: condNorm, heatLoss: lossNorm, temperatureStability: stabNorm, solarGain: solNorm, heatingDemand: heatNorm } };
+      }
+
+      function getReasoning(cSim, cInputs, cHeat) {
+        const reasons = [];
+        const dLoss = baselineSim.totalHeatLossKWh - cSim.totalHeatLossKWh;
+        const pctLoss = Math.round((dLoss / Math.max(0.1, baselineSim.totalHeatLossKWh)) * 100);
+        if (dLoss > 0.5) reasons.push(`Reduced envelope & infiltration heat loss by ${dLoss.toFixed(1)} kWh (-${pctLoss}%) compared with baseline.`);
+        const dSolar = cSim.totalSolarGainKWh - baselineSim.totalSolarGainKWh;
+        const pctSolar = Math.round((dSolar / Math.max(0.1, baselineSim.totalSolarGainKWh)) * 100);
+        if (dSolar > 0.5) reasons.push(`Improved useful passive solar heat gain by ${dSolar.toFixed(1)} kWh (+${pctSolar}%) under ${cInputs.orientation} orientation.`);
+        const bSwing = baselineSim.maxIndoorTempC - baselineSim.minIndoorTempC;
+        const cSwing = cSim.maxIndoorTempC - cSim.minIndoorTempC;
+        if (bSwing - cSwing > 0.5) reasons.push(`Improved indoor-temperature stability by dampening diurnal swing from ${bSwing.toFixed(1)}°C to ${cSwing.toFixed(1)}°C.`);
+        const dMin = cSim.minIndoorTempC - baselineSim.minIndoorTempC;
+        if (dMin > 0.5) reasons.push(`Elevated minimum overnight indoor temperature by +${dMin.toFixed(1)}°C (${baselineSim.minIndoorTempC}°C → ${cSim.minIndoorTempC}°C).`);
+        const dHeat = baselineHeatProxy - cHeat;
+        const pctHeat = Math.round((dHeat / Math.max(0.1, baselineHeatProxy)) * 100);
+        if (dHeat > 0.5) reasons.push(`Lower estimated active-heating requirement in prototype model, saving ${dHeat.toFixed(1)} kWh/day (-${pctHeat}%).`);
+        if (reasons.length === 0) reasons.push('Maintains balanced passive thermal characteristics relative to user baseline.');
+        return reasons;
+      }
+
+      const baseScore = calcScore(baselineSim, Math.round((baselineSim.maxIndoorTempC - baselineSim.minIndoorTempC) * 10) / 10, baselineHeatProxy);
+      const evaluatedBaseline = {
+        id: 'baseline',
+        rank: 0,
+        name: 'User Design / Baseline',
+        tagline: `Configured: ${baselineInputs.orientation}, ${WALL_MATERIALS[baselineInputs.wallMaterialId]?.name.split('(')[0]}`,
+        inputs: baselineInputs,
+        simulation: baselineSim,
+        metrics: {
+          totalHeatLossKWh: baselineSim.totalHeatLossKWh,
+          totalSolarGainKWh: baselineSim.totalSolarGainKWh,
+          minIndoorTempC: baselineSim.minIndoorTempC,
+          maxIndoorTempC: baselineSim.maxIndoorTempC,
+          avgIndoorTempC: baselineSim.avgIndoorTempC,
+          diurnalSwingC: Math.round((baselineSim.maxIndoorTempC - baselineSim.minIndoorTempC) * 10) / 10,
+          heatingDemandProxyKWh: baselineHeatProxy,
+          overallScore: baseScore.score,
+          scoreComponents: baseScore.components,
+          isFeasible: true
+        },
+        isBaseline: true,
+        isRecommended: false,
+        recommendationReasoning: []
+      };
+
+      const evaluatedCandidates = intermediate.map(i => {
+        const sc = calcScore(i.sim, i.swing, i.heatProxy);
+        const reasoning = getReasoning(i.sim, i.candidate.inputs, i.heatProxy);
+        return {
+          id: i.candidate.id,
+          rank: 0,
+          name: i.candidate.name,
+          tagline: i.candidate.tagline,
+          inputs: i.candidate.inputs,
+          simulation: i.sim,
+          metrics: {
+            totalHeatLossKWh: i.sim.totalHeatLossKWh,
+            totalSolarGainKWh: i.sim.totalSolarGainKWh,
+            minIndoorTempC: i.sim.minIndoorTempC,
+            maxIndoorTempC: i.sim.maxIndoorTempC,
+            avgIndoorTempC: i.sim.avgIndoorTempC,
+            diurnalSwingC: i.swing,
+            heatingDemandProxyKWh: i.heatProxy,
+            overallScore: sc.score,
+            scoreComponents: sc.components,
+            isFeasible: i.isFeasible
+          },
+          isBaseline: false,
+          isRecommended: false,
+          recommendationReasoning: reasoning
+        };
+      });
+
+      evaluatedCandidates.sort((a, b) => b.metrics.overallScore - a.metrics.overallScore);
+      evaluatedCandidates.forEach((c, idx) => { c.rank = idx + 1; });
+      const recommended = evaluatedCandidates[0];
+      recommended.isRecommended = true;
+      const top5 = evaluatedCandidates.slice(0, 5);
+
+      return {
+        baseline: evaluatedBaseline,
+        candidates: evaluatedCandidates,
+        recommended,
+        top5,
+        evaluatedCount: evaluatedCandidates.length,
+        feasibleCount: evaluatedCandidates.length
+      };
+    }
+
+    // ==========================================
+    // 3. UI COMPONENTS
+    // ==========================================
+
+    const DisclaimerBadge = ({ type, label }) => {
+      let colorClass = 'bg-cyan-950/70 text-cyan-300 border-cyan-500/40';
+      let text = label || 'Prototype — Ladakh-like Cold Region';
+      if (type === 'synthetic') {
+        colorClass = 'bg-indigo-950/60 text-indigo-300 border-indigo-500/40';
+        text = label || 'Synthetic Climate Profile';
+      }
+      return (
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium border ${colorClass}`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
+          {text}
+        </span>
+      );
+    };
+
+    const MetricCard = ({ label, value, unit, subtext, accentColor = 'cyan' }) => {
+      const colorMap = {
+        cyan: 'text-cyan-300 border-cyan-500/20',
+        blue: 'text-blue-300 border-blue-500/20',
+        emerald: 'text-emerald-300 border-emerald-500/20',
+        amber: 'text-amber-300 border-amber-500/20',
+        red: 'text-red-300 border-red-500/20',
+      };
+      return (
+        <div className={`p-3.5 rounded-xl border bg-slate-900/80 shadow-lg flex flex-col justify-between ${colorMap[accentColor] || colorMap.cyan}`}>
+          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block mb-1">{label}</span>
+          <div className="flex items-baseline gap-1 my-0.5">
+            <span className="text-xl font-bold font-mono text-white">{value}</span>
+            {unit && <span className="text-xs font-mono text-slate-400">{unit}</span>}
+          </div>
+          {subtext && <span className="text-[10px] text-slate-400 mt-1 leading-tight">{subtext}</span>}
+        </div>
+      );
+    };
+
+    // 2D Shelter Visualizer
+    const ShelterViewer2D = ({ inputs }) => {
+      const [viewMode, setViewMode] = useState('floorplan');
+      const { lengthM, widthM, heightM, orientation, windowAreaM2, occupants } = inputs;
+      const floorArea = (lengthM * widthM).toFixed(1);
+      const grossWall = 2 * (lengthM + widthM) * heightM;
+      const clampedWin = Math.min(windowAreaM2, grossWall * 0.85);
+
+      const maxDim = Math.max(lengthM, widthM, heightM, 8.0);
+      const scale = 240 / maxDim;
+
+      const fpWidth = lengthM * scale;
+      const fpHeight = widthM * scale;
+      const fpX = 200 - fpWidth / 2;
+      const fpY = 160 - fpHeight / 2;
+
+      const elWidth = lengthM * scale;
+      const elHeight = heightM * scale;
+      const elX = 200 - elWidth / 2;
+      const elY = 220 - elHeight;
+
+      const winHeightM = Math.min(heightM * 0.75, Math.sqrt(clampedWin * 0.6));
+      const winWidthM = clampedWin / Math.max(0.5, winHeightM);
+      const winWidthPx = Math.min(elWidth * 0.85, winWidthM * scale);
+      const winHeightPx = Math.min(elHeight * 0.8, winHeightM * scale);
+
+      const orientationAngles = { North: 0, East: 90, South: 180, West: 270 };
+      const compassAngle = orientationAngles[orientation] || 180;
+
+      return (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col h-full shadow-xl font-mono">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <span className="text-xs font-semibold uppercase text-slate-300">2D Engineering Schematic</span>
+            <div className="flex bg-slate-950 p-0.5 rounded border border-slate-800 text-xs">
+              <button onClick={() => setViewMode('floorplan')} className={`px-2.5 py-0.5 rounded ${viewMode === 'floorplan' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'}`}>Floor Plan</button>
+              <button onClick={() => setViewMode('facade')} className={`px-2.5 py-0.5 rounded ${viewMode === 'facade' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'}`}>Elevation</button>
+            </div>
+          </div>
+
+          <div className="relative flex-1 min-h-[280px] flex items-center justify-center bg-slate-950/80 rounded border border-slate-800/80 overflow-hidden">
+            <svg viewBox="0 0 400 320" className="w-full h-full max-h-[300px]">
+              {viewMode === 'floorplan' ? (
+                <g>
+                  <rect x={fpX} y={fpY} width={fpWidth} height={fpHeight} fill="#0F172A" stroke="#38BDF8" strokeWidth="6" rx="2" />
+                  <rect x={fpX + 3} y={fpY + 3} width={Math.max(1, fpWidth - 6)} height={Math.max(1, fpHeight - 6)} fill="#020617" stroke="#1E293B" strokeWidth="1" />
+                  <rect x={fpX + fpWidth * 0.25} y={fpY + fpHeight - 4} width={fpWidth * 0.5} height="8" fill="#38BDF8" fillOpacity="0.5" stroke="#06B6D4" strokeWidth="1.5" />
+                  <text x={fpX + fpWidth / 2} y={fpY + fpHeight + 16} textAnchor="middle" fill="#38BDF8" fontSize="9">Glazed Facade ({orientation})</text>
+                  <text x="200" y="155" textAnchor="middle" fill="#E2E8F0" fontSize="11" fontWeight="bold">{floorArea} m²</text>
+                  <text x={fpX + fpWidth / 2} y={fpY - 14} textAnchor="middle" fill="#38BDF8" fontSize="10" fontWeight="bold">L = {lengthM}m</text>
+                  <text x={fpX - 14} y={fpY + fpHeight / 2} textAnchor="end" fill="#38BDF8" fontSize="10" fontWeight="bold">W = {widthM}m</text>
+                </g>
+              ) : (
+                <g>
+                  <line x1="20" y1="220" x2="380" y2="220" stroke="#475569" strokeWidth="2" />
+                  <text x="375" y="235" textAnchor="end" fill="#64748B" fontSize="8">±0.00 Ground</text>
+                  <rect x={elX} y={elY} width={elWidth} height={elHeight} fill="#0F172A" stroke="#38BDF8" strokeWidth="2" />
+                  <rect x={200 - winWidthPx / 2} y={elY + (elHeight - winHeightPx) / 2} width={winWidthPx} height={winHeightPx} fill="#38BDF8" fillOpacity="0.3" stroke="#38BDF8" strokeWidth="2" />
+                  <text x={elX + elWidth + 18} y={elY + elHeight / 2} fill="#38BDF8" fontSize="10" fontWeight="bold">H = {heightM}m</text>
+                  <text x="200" y={elY + elHeight / 2 + 4} textAnchor="middle" fill="#E0F2FE" fontSize="9" fontWeight="bold">{clampedWin.toFixed(1)} m²</text>
+                </g>
+              )}
+              {/* Compass */}
+              <g transform="translate(355, 42)">
+                <circle cx="0" cy="0" r="20" fill="#0B1120" stroke="#334155" strokeWidth="1.5" />
+                <text x="0" y="-10" textAnchor="middle" fill="#EF4444" fontSize="7" fontWeight="bold">N</text>
+                <text x="0" y="16" textAnchor="middle" fill="#38BDF8" fontSize="7" fontWeight="bold">S</text>
+                <g transform={`rotate(${compassAngle})`}>
+                  <polygon points="0,-13 3,0 -3,0" fill="#EF4444" />
+                  <polygon points="0,13 3,0 -3,0" fill="#94A3B8" />
+                </g>
+              </g>
+            </svg>
+            <div className="absolute bottom-2 left-2 bg-slate-900/90 border border-slate-800 rounded px-2 py-0.5 text-[10px] text-slate-300">
+              Facing: <strong className="text-cyan-400">{orientation}</strong> • Occupants: <strong className="text-cyan-400">{occupants}</strong>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Temperature Chart Component
+    const TemperatureChart = ({ data }) => {
+      const [hoveredIdx, setHoveredIdx] = useState(null);
+      if (!data || data.length === 0) return null;
+
+      const width = 640, height = 240, padLeft = 45, padRight = 15, padTop = 20, padBottom = 30;
+      const chartW = width - padLeft - padRight;
+      const chartH = height - padTop - padBottom;
+      const minTemp = -25, maxTemp = 20, range = maxTemp - minTemp;
+
+      const getY = t => padTop + chartH - ((Math.max(minTemp, Math.min(maxTemp, t)) - minTemp) / range) * chartH;
+      const getX = i => padLeft + (i / 23) * chartW;
+
+      const outdoorPoints = data.map((d, i) => `${getX(i)},${getY(d.outdoorTempC)}`).join(' ');
+      const indoorPoints = data.map((d, i) => `${getX(i)},${getY(d.indoorTempC)}`).join(' ');
+      const hoveredData = hoveredIdx !== null ? data[hoveredIdx] : null;
+
+      return (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl font-mono">
+          <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
+            <div>
+              <h3 className="text-sm font-semibold text-white uppercase">24-Hour Temperature Trajectory</h3>
+              <p className="text-xs text-slate-400">Outdoor Temperature vs Predicted Indoor Temperature (°C)</p>
+            </div>
+            <div className="flex gap-4 text-xs">
+              <span className="text-cyan-300 flex items-center gap-1"><span className="w-2.5 h-0.5 bg-cyan-400"></span> Indoor Temp</span>
+              <span className="text-blue-400 flex items-center gap-1"><span className="w-2.5 h-0.5 bg-blue-500"></span> Outdoor Temp</span>
+            </div>
+          </div>
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto max-h-[250px]" onMouseLeave={() => setHoveredIdx(null)}>
+            <line x1={padLeft} y1={getY(0)} x2={padLeft + chartW} y2={getY(0)} stroke="#EF4444" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
+            <text x={padLeft + 4} y={getY(0) - 3} fill="#EF4444" fontSize="8">0°C Freezing Line</text>
+
+            {[-20, -10, 0, 10, 20].map(t => (
+              <g key={t}>
+                <line x1={padLeft} y1={getY(t)} x2={padLeft + chartW} y2={getY(t)} stroke="#334155" strokeWidth="0.5" strokeDasharray="2,2" opacity="0.4" />
+                <text x={padLeft - 4} y={getY(t) + 3} textAnchor="end" fill="#64748B" fontSize="8">{t}°C</text>
+              </g>
+            ))}
+
+            {[0, 4, 8, 12, 16, 20].map(h => (
+              <text key={h} x={getX(h)} y={padTop + chartH + 16} textAnchor="middle" fill="#64748B" fontSize="8">{h}:00</text>
+            ))}
+
+            <polyline points={outdoorPoints} fill="none" stroke="#3B82F6" strokeWidth="2" strokeDasharray="4,2" />
+            <polyline points={indoorPoints} fill="none" stroke="#22D3EE" strokeWidth="2.5" />
+
+            {data.map((d, i) => (
+              <circle key={i} cx={getX(i)} cy={getY(d.indoorTempC)} r={hoveredIdx === i ? 4 : 2} fill="#22D3EE" onMouseEnter={() => setHoveredIdx(i)} />
+            ))}
+          </svg>
+
+          <div className="mt-2 pt-2 border-t border-slate-800 text-xs min-h-[24px]">
+            {hoveredData ? (
+              <div className="flex gap-4 text-slate-300">
+                <span>Hour: <strong>{hoveredData.timeLabel}</strong></span>
+                <span>Outdoor: <strong className="text-blue-400">{hoveredData.outdoorTempC}°C</strong></span>
+                <span>Indoor: <strong className="text-cyan-300">{hoveredData.indoorTempC}°C</strong></span>
+                <span>ΔT: <strong className="text-emerald-400">{(hoveredData.indoorTempC - hoveredData.outdoorTempC).toFixed(1)}°C</strong></span>
+              </div>
+            ) : (
+              <span className="text-slate-400 italic text-[11px]">Hover over points to inspect hourly temperature.</span>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // Heat Transfer Breakdown Chart
+    const HeatBalanceChart = ({ data }) => {
+      if (!data) return null;
+      const width = 640, height = 240, padLeft = 45, padRight = 15, padTop = 20, padBottom = 25;
+      const chartW = width - padLeft - padRight;
+      const chartH = height - padTop - padBottom;
+      const maxW = 3500;
+
+      const getY = w => padTop + chartH - (Math.max(0, Math.min(maxW, w)) / maxW) * chartH;
+      const getX = i => padLeft + (i / 23) * chartW;
+
+      const pSolar = data.map((d, i) => `${getX(i)},${getY(d.solarGainW)}`).join(' ');
+      const pWall = data.map((d, i) => `${getX(i)},${getY(d.wallLossW)}`).join(' ');
+      const pWin = data.map((d, i) => `${getX(i)},${getY(d.windowLossW)}`).join(' ');
+      const pVent = data.map((d, i) => `${getX(i)},${getY(d.ventilationLossW)}`).join(' ');
+
+      return (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl font-mono">
+          <div className="border-b border-slate-800 pb-2 mb-2">
+            <h3 className="text-sm font-semibold text-white uppercase">Heat Transfer Components Breakdown (Watts)</h3>
+            <p className="text-[11px] text-slate-400">Sign Convention: Solar & Internal Gains are additions (+W). Wall, Roof, Floor, Window, Vent are losses departing space.</p>
+          </div>
+          <div className="flex gap-4 text-[10px] mb-2 text-slate-300">
+            <span className="text-amber-400">■ Solar Gain</span>
+            <span className="text-sky-400">■ Wall Loss</span>
+            <span className="text-rose-400">■ Window Loss</span>
+            <span className="text-purple-400">■ Vent Loss</span>
+          </div>
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto max-h-[220px]">
+            {[0, 1000, 2000, 3000].map(v => (
+              <g key={v}>
+                <line x1={padLeft} y1={getY(v)} x2={padLeft + chartW} y2={getY(v)} stroke="#334155" strokeWidth="0.5" strokeDasharray="2,2" opacity="0.4" />
+                <text x={padLeft - 4} y={getY(v) + 3} textAnchor="end" fill="#64748B" fontSize="8">{v}W</text>
+              </g>
+            ))}
+            <polyline points={pSolar} fill="none" stroke="#FBBF24" strokeWidth="2" />
+            <polyline points={pWall} fill="none" stroke="#38BDF8" strokeWidth="1.5" />
+            <polyline points={pWin} fill="none" stroke="#FB7185" strokeWidth="2" />
+            <polyline points={pVent} fill="none" stroke="#C084FC" strokeWidth="1.5" />
+          </svg>
+        </div>
+      );
+    };
+
+    // Phase 3 Optimizer Temperature Comparison Chart
+    const OptimizerTempChart = ({ baselineData, recommendedData }) => {
+      if (!baselineData || !recommendedData) return null;
+      const [hoveredIdx, setHoveredIdx] = useState(null);
+      const width = 640, height = 240, padLeft = 45, padRight = 20, padTop = 20, padBottom = 30;
+      const chartW = width - padLeft - padRight;
+      const chartH = height - padTop - padBottom;
+      const allTemps = [...baselineData.flatMap(d => [d.outdoorTempC, d.indoorTempC]), ...recommendedData.map(d => d.indoorTempC)];
+      const minT = Math.min(-20, Math.floor(Math.min(...allTemps) - 2));
+      const maxT = Math.max(16, Math.ceil(Math.max(...allTemps) + 2));
+      const range = maxT - minT;
+
+      const getY = t => padTop + chartH - ((Math.max(minT, Math.min(maxT, t)) - minT) / range) * chartH;
+      const getX = i => padLeft + (i / 23) * chartW;
+
+      const pOut = baselineData.map((d, i) => `${getX(i)},${getY(d.outdoorTempC)}`).join(' ');
+      const pBase = baselineData.map((d, i) => `${getX(i)},${getY(d.indoorTempC)}`).join(' ');
+      const pRec = recommendedData.map((d, i) => `${getX(i)},${getY(d.indoorTempC)}`).join(' ');
+
+      const hoveredBase = hoveredIdx !== null ? baselineData[hoveredIdx] : null;
+      const hoveredRec = hoveredIdx !== null ? recommendedData[hoveredIdx] : null;
+
+      return (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl font-mono">
+          <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
+            <div>
+              <h3 className="text-sm font-bold text-white uppercase">24-Hour Temperature Trajectory Comparison</h3>
+              <p className="text-[10px] text-slate-400">Baseline vs Recommended Passive Design vs Outdoor Ambient</p>
+            </div>
+            <div className="flex gap-3 text-[10px]">
+              <span className="text-cyan-400 font-bold">■ Recommended</span>
+              <span className="text-blue-400">■ User Baseline</span>
+              <span className="text-amber-400">┄ Outdoor</span>
+            </div>
+          </div>
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto max-h-[220px]" onMouseLeave={() => setHoveredIdx(null)}>
+            {[-15, -10, -5, 0, 5, 10, 15].map(v => (
+              <g key={v}>
+                <line x1={padLeft} y1={getY(v)} x2={padLeft + chartW} y2={getY(v)} stroke={v === 0 ? '#475569' : '#1e293b'} strokeDasharray={v === 0 ? '4,3' : '2,2'} strokeWidth={v === 0 ? 1 : 0.5} />
+                <text x={padLeft - 4} y={getY(v) + 3} textAnchor="end" fill="#64748b" fontSize="8">{v}°C</text>
+              </g>
+            ))}
+            <polyline points={pOut} fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.8" />
+            <polyline points={pBase} fill="none" stroke="#3b82f6" strokeWidth="2" opacity="0.85" />
+            <polyline points={pRec} fill="none" stroke="#22d3ee" strokeWidth="2.5" />
+            {baselineData.map((d, i) => (
+              <rect key={i} x={getX(i) - (chartW / 48)} y={padTop} width={chartW / 24} height={chartH} fill="transparent" className="cursor-crosshair" onMouseEnter={() => setHoveredIdx(i)} />
+            ))}
+            {hoveredIdx !== null && hoveredBase && hoveredRec && (
+              <g>
+                <line x1={getX(hoveredIdx)} y1={padTop} x2={getX(hoveredIdx)} y2={padTop + chartH} stroke="#94a3b8" strokeWidth="1" strokeDasharray="2,2" />
+                <circle cx={getX(hoveredIdx)} cy={getY(hoveredBase.indoorTempC)} r="3.5" fill="#3b82f6" />
+                <circle cx={getX(hoveredIdx)} cy={getY(hoveredRec.indoorTempC)} r="4.5" fill="#22d3ee" />
+              </g>
+            )}
+          </svg>
+          <div className="mt-1 pt-1 border-t border-slate-800 text-[11px] min-h-[20px]">
+            {hoveredIdx !== null && hoveredBase && hoveredRec ? (
+              <div className="flex gap-4 text-slate-300">
+                <span>Hour: <strong>{hoveredBase.timeLabel}</strong></span>
+                <span>Outdoor: <strong className="text-amber-400">{hoveredBase.outdoorTempC}°C</strong></span>
+                <span>Baseline: <strong className="text-blue-400">{hoveredBase.indoorTempC}°C</strong></span>
+                <span>Rec: <strong className="text-cyan-300">{hoveredRec.indoorTempC}°C</strong></span>
+                <span className="text-emerald-400 font-bold">Buffer: +{(hoveredRec.indoorTempC - hoveredBase.indoorTempC).toFixed(1)}°C</span>
+              </div>
+            ) : (
+              <span className="text-slate-400 italic text-[10px]">Hover to inspect hourly temperature deltas.</span>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // Phase 3 Heat Loss Component Comparison Bar Chart
+    const LossComparisonBarChart = ({ baselineSim, recommendedSim }) => {
+      if (!baselineSim || !recommendedSim) return null;
+      const getLoss = sim => {
+        let w = 0, r = 0, f = 0, win = 0, v = 0;
+        for (const h of sim.hourlyData) {
+          w += Math.max(0, h.wallLossW) * 3600;
+          r += Math.max(0, h.roofLossW) * 3600;
+          f += Math.max(0, h.floorLossW) * 3600;
+          win += Math.max(0, h.windowLossW) * 3600;
+          v += Math.max(0, h.ventilationLossW) * 3600;
+        }
+        return {
+          wall: Math.round((w / 3.6e6) * 10) / 10,
+          roof: Math.round((r / 3.6e6) * 10) / 10,
+          floor: Math.round((f / 3.6e6) * 10) / 10,
+          win: Math.round((win / 3.6e6) * 10) / 10,
+          vent: Math.round((v / 3.6e6) * 10) / 10
+        };
+      };
+      const bL = getLoss(baselineSim);
+      const rL = getLoss(recommendedSim);
+      const cats = [
+        { label: 'Walls', b: bL.wall, r: rL.wall },
+        { label: 'Roof', b: bL.roof, r: rL.roof },
+        { label: 'Floor', b: bL.floor, r: rL.floor },
+        { label: 'Windows', b: bL.win, r: rL.win },
+        { label: 'Infiltration', b: bL.vent, r: rL.vent }
+      ];
+      const maxVal = Math.max(...cats.flatMap(c => [c.b, c.r]), 10);
+
+      return (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-xl font-mono text-xs space-y-3">
+          <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+            <div>
+              <h3 className="text-sm font-bold text-white uppercase">Heat-Loss Breakdown Comparison</h3>
+              <p className="text-[10px] text-slate-400">Cumulative transmission & ventilation losses (kWh/day)</p>
+            </div>
+            <div className="flex gap-3 text-[10px]">
+              <span className="text-blue-400">■ Baseline ({baselineSim.totalHeatLossKWh} kWh)</span>
+              <span className="text-cyan-400 font-bold">■ Rec ({recommendedSim.totalHeatLossKWh} kWh)</span>
+            </div>
+          </div>
+          <div className="space-y-2.5 pt-1">
+            {cats.map(cat => {
+              const delta = Math.round((cat.b - cat.r) * 10) / 10;
+              return (
+                <div key={cat.label} className="space-y-1">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-slate-300 font-bold">{cat.label}</span>
+                    <span className={delta > 0.1 ? 'text-emerald-400 font-bold' : delta < -0.1 ? 'text-rose-400' : 'text-slate-400'}>
+                      {delta > 0.1 ? `-${delta} kWh (-${Math.round((delta / Math.max(0.1, cat.b)) * 100)}%)` : delta < -0.1 ? `+${Math.abs(delta)} kWh` : '0 kWh'}
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-12 text-[9px] text-slate-400 text-right">Base</span>
+                      <div className="flex-1 bg-slate-950 rounded h-2.5 overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded" style={{ width: `${Math.min(100, Math.max(6, (cat.b / maxVal) * 100))}%` }}></div>
+                      </div>
+                      <span className="w-10 text-[9px] text-slate-400 text-right">{cat.b}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-12 text-[9px] text-cyan-300 text-right">Rec</span>
+                      <div className="flex-1 bg-slate-950 rounded h-2.5 overflow-hidden">
+                        <div className="h-full bg-cyan-400 rounded" style={{ width: `${Math.min(100, Math.max(6, (cat.r / maxVal) * 100))}%` }}></div>
+                      </div>
+                      <span className="w-10 text-[9px] text-cyan-300 text-right font-bold">{cat.r}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 3.8. HOME / WELCOME PAGE COMPONENT
+    // ==========================================
+
+    const HomePage = ({ onNavigate }) => {
+      const featureCards = [
+        {
+          id: 'climate',
+          title: 'Climate Analysis',
+          subtitle: 'Leh, Ladakh Reference',
+          desc: 'Diurnal cold-region weather dynamics: -18.2°C design minimum, 3,500m barometric air density (0.88 kg/m³), and high-altitude solar irradiance up to 785 W/m².',
+          targetTab: 'assumptions',
+          color: 'border-blue-500/30 text-blue-400 bg-blue-950/20 hover:border-blue-500/60',
+          icon: (
+            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          )
+        },
+        {
+          id: 'simulation',
+          title: 'Thermal Simulation',
+          subtitle: 'Deterministic 24h Physics',
+          desc: 'Discrete-time 1st-order dynamic heat balance ODE solver with hourly component flux breakdown: envelope conduction, fenestration, ventilation, and internal gains.',
+          targetTab: 'simulation',
+          color: 'border-cyan-500/30 text-cyan-400 bg-cyan-950/20 hover:border-cyan-500/60',
+          icon: (
+            <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          )
+        },
+        {
+          id: 'optimization',
+          title: 'Passive Optimization',
+          subtitle: 'Multi-Objective Scoring',
+          desc: 'Deterministic candidate evaluation across 24 architectural archetypes balancing heat-loss reduction, solar capture, temperature stability, and active heating deficit.',
+          targetTab: 'optimizer',
+          color: 'border-purple-500/30 text-purple-400 bg-purple-950/20 hover:border-purple-500/60',
+          icon: (
+            <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          )
+        },
+        {
+          id: 'recommended',
+          title: 'Recommended Shelter',
+          subtitle: 'Decision-Support Synthesis',
+          desc: 'Mathematically grounded recommendations with dynamic before-vs-after comparison, heat-loss component deltas, and 1-click adoption to active shelter model.',
+          targetTab: 'results',
+          color: 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20 hover:border-emerald-500/60',
+          icon: (
+            <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )
+        }
+      ];
+
+      return (
+        <div className="space-y-8 animate-fadeIn font-mono">
+          {/* Hero Welcome Section */}
+          <div className="relative rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/50 border border-slate-800 p-6 sm:p-10 shadow-2xl overflow-hidden">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+
+            <div className="relative z-10 max-w-4xl space-y-5">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300">
+                  Ref: Leh, Ladakh (3,500m MSL)
+                </span>
+              </div>
+
+              <div>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight">
+                  Thermo<span className="text-cyan-400">Shelter</span>
+                </h1>
+                <p className="text-sm sm:text-base text-cyan-300 font-semibold mt-1">
+                  Dynamic Thermal Simulation & Passive Thermal Optimizer
+                </p>
+              </div>
+
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-3xl">
+                ThermoShelter is a climate-aware decision-support platform for designing passive shelters for thermal comfort in cold high-altitude regions. Calibrated for extreme sub-zero conditions in Leh, Ladakh (-18.2°C design low), it calculates 24-hour physical heat balance, evaluates passive solar gain, envelope insulation, and thermal mass inertia, and deterministically recommends high-performance passive configurations to eliminate reliance on fossil-fuel combustion heating.
+              </p>
+
+              <div className="pt-3 flex items-center gap-4 flex-wrap">
+                <button
+                  onClick={() => onNavigate('dashboard')}
+                  className="px-6 py-3.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm flex items-center gap-2.5 shadow-xl shadow-cyan-500/25 transition transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                >
+                  <span>Start Designing</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={() => onNavigate('simulation')}
+                  className="px-5 py-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
+                >
+                  <span>Run Thermal Simulation</span>
+                  <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Feature Cards Grid */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Core Platform Capabilities
+              </h2>
+              <span className="text-[11px] text-slate-400">Click any card to explore section</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {featureCards.map(card => (
+                <div
+                  key={card.id}
+                  onClick={() => onNavigate(card.targetTab)}
+                  className={`p-5 rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-xl group ${card.color}`}
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        {card.icon}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono group-hover:text-white transition">
+                        Explore →
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-bold text-white group-hover:text-cyan-300 transition">
+                        {card.title}
+                      </h3>
+                      <span className="text-[11px] text-slate-400 font-mono block mt-0.5">
+                        {card.subtitle}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      {card.desc}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400 group-hover:text-slate-200 transition">
+                      Open {card.title}
+                    </span>
+                    <svg className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ==========================================
+    // 4. MAIN APP CONTAINER
+    // ==========================================
+
+    function App() {
+      const getTabFromLocation = () => {
+        if (typeof window === 'undefined') return 'home';
+        const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
+        if (rawHash === 'dashboard') return 'dashboard';
+        if (rawHash === 'input') return 'input';
+        if (rawHash === 'simulation') return 'simulation';
+        if (rawHash === 'optimizer') return 'optimizer';
+        if (rawHash === 'results') return 'results';
+        if (rawHash === 'assumptions') return 'assumptions';
+        if (rawHash === 'home' || rawHash === '' || rawHash === '/') return 'home';
+        return 'home';
+      };
+
+      const [inputs, setInputs] = useState({
+        designTitle: 'Ladakh High-Altitude Outpost A1',
+        lengthM: 6.0,
+        widthM: 4.0,
+        heightM: 2.8,
+        orientation: 'South',
+        occupants: 4,
+        wallMaterialId: 'rammed_earth',
+        roofMaterialId: 'traditional_mud_timber',
+        insulationLevel: 'Medium',
+        windowAreaM2: 5.5,
+        glazingTypeId: 'double_clear',
+        thermalMassLevel: 'High',
+        airLeakageLevel: 'Medium'
+      });
+
+      const [activeTab, setActiveTabState] = useState(() => getTabFromLocation());
+
+      const setActiveTab = (tab) => {
+        setActiveTabState(tab);
+        if (typeof window !== 'undefined') {
+          const targetHash = tab === 'home' ? '#/' : `#/${tab}`;
+          if (window.location.hash !== targetHash) {
+            window.location.hash = targetHash;
+          }
+        }
+      };
+
+      useEffect(() => {
+        if (typeof window === 'undefined') return;
+        if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
+          if (window.location.hash !== '#/') {
+            window.location.hash = '#/';
+          }
+          setActiveTabState('home');
+        }
+
+        const handleHashChange = () => {
+          const current = getTabFromLocation();
+          setActiveTabState(current);
+        };
+
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+      }, []);
+
+      const [simulationState, setSimulationState] = useState('completed');
+      const [simulationLogs, setSimulationLogs] = useState([
+        '[INIT] Phase 2 deterministic engine active',
+        '[SOLVE] 24-hour heat balance evaluated'
+      ]);
+      const [notification, setNotification] = useState(null);
+
+      const validationErrors = useMemo(() => validateInputs(inputs), [inputs]);
+      const currentResults = useMemo(() => runDeterministicSimulation(inputs), [inputs]);
+      const optimizationData = useMemo(() => runDesignOptimization(inputs), [inputs]);
+      const [optSortField, setOptSortField] = useState('rank');
+      const [optSortOrder, setOptSortOrder] = useState('asc');
+      const [optFilterOrient, setOptFilterOrient] = useState('ALL');
+      const [showTraceability, setShowTraceability] = useState(false);
+
+      const applyRecommended = () => {
+        setInputs(optimizationData.recommended.inputs);
+        setNotification(`Applied recommended design: "${optimizationData.recommended.name}"`);
+        setTimeout(() => setNotification(null), 3500);
+      };
+
+      const applyCandidate = (cand) => {
+        setInputs(cand.inputs);
+        setNotification(`Applied candidate design: "${cand.name}"`);
+        setTimeout(() => setNotification(null), 3500);
+      };
+
+      const updateInput = (k, v) => setInputs(prev => ({ ...prev, [k]: v }));
+
+      const handleRunSimulation = async () => {
+        setSimulationState('running');
+        setSimulationLogs(['[00:00:01] Reading shelter geometry & materials...']);
+        await new Promise(r => setTimeout(r, 250));
+        setSimulationLogs(prev => [...prev, `[00:00:02] Calculating envelope conductances: Wall U = ${currentResults.envelopeUValues.uWallWm2K} W/m²K...`]);
+        await new Promise(r => setTimeout(r, 300));
+        setSimulationLogs(prev => [...prev, `[00:00:03] Integrating 24h ODE: dt = 3600s, C = ${(currentResults.effectiveThermalCapacitanceJK / 1000).toFixed(0)} kJ/K...`]);
+        await new Promise(r => setTimeout(r, 250));
+        setSimulationLogs(prev => [...prev, `[00:00:04] Simulation complete: Min Tin = ${currentResults.minIndoorTempC}°C, Max Tin = ${currentResults.maxIndoorTempC}°C, Avg Tin = ${currentResults.avgIndoorTempC}°C.`]);
+        setSimulationState('completed');
+      };
+
+      const handleExportCSV = () => {
+        const rows = [
+          ['Hour', 'Time', 'Outdoor_Temp_C', 'Indoor_Temp_C', 'Solar_Gain_W', 'Internal_Gain_W', 'Wall_Loss_W', 'Roof_Loss_W', 'Floor_Loss_W', 'Window_Loss_W', 'Vent_Loss_W', 'Total_Gain_W', 'Total_Loss_W', 'Net_Heat_Flow_W'],
+          ...currentResults.hourlyData.map(r => [
+            r.hour, r.timeLabel, r.outdoorTempC, r.indoorTempC, r.solarGainW, r.internalGainW, r.wallLossW, r.roofLossW, r.floorLossW, r.windowLossW, r.ventilationLossW, r.totalGainW, r.totalLossW, r.netHeatFlowW
+          ])
+        ];
+        const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
+        const link = document.createElement('a');
+        link.setAttribute('href', encodeURI(csvContent));
+        link.setAttribute('download', `ThermoShelter_${inputs.designTitle.replace(/\s+/g, '_')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-mono text-xs">
+          {/* Header */}
+          <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-3">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <button
+                onClick={() => setActiveTab('home')}
+                className="flex items-center gap-3 text-left hover:opacity-90 transition group cursor-pointer focus:outline-none"
+                title="Go to Home"
+              >
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center border border-cyan-400/30 group-hover:scale-105 transition-transform">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-xl font-bold text-white">Thermo<span className="text-cyan-400">Shelter</span></h1>
+                  </div>
+                  <p className="text-[11px] text-slate-400">Dynamic Thermal Simulation & Passive Thermal Optimizer</p>
+                </div>
+              </button>
+
+              <div className="flex items-center gap-3">
+                <span className="text-slate-300 px-3 py-1 rounded bg-slate-900 border border-slate-800">
+                  Ref: Leh, Ladakh (3,500m MSL)
+                </span>
+              </div>
+            </div>
+          </header>
+
+          {/* Navigation */}
+          <nav className="bg-slate-900/80 border-b border-slate-800 px-4 sm:px-6 sticky top-[61px] z-30 backdrop-blur-md">
+            <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto py-2">
+              {[
+                { id: 'home', label: 'Home' },
+                { id: 'dashboard', label: 'Dashboard' },
+                { id: 'input', label: 'Shelter Input' },
+                { id: 'simulation', label: 'Thermal Simulation' },
+                { id: 'optimizer', label: 'Design Optimizer' },
+                { id: 'results', label: 'Results & Decisions' },
+                { id: 'assumptions', label: 'Model Assumptions' }
+              ].map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    activeTab === item.id ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+
+          {/* Main View */}
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+            {/* TAB: HOME */}
+            {activeTab === 'home' && <HomePage onNavigate={setActiveTab} />}
+
+            {/* TAB: DASHBOARD */}
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40 border border-slate-800 p-6 space-y-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="px-2.5 py-1 rounded bg-blue-950/60 border border-blue-600/40 text-xs font-mono text-blue-300">Smart India Hackathon 2026</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">Climate-Aware Decision-Support Platform for High-Altitude Passive Shelters</h2>
+                  <p className="text-slate-300 text-xs leading-relaxed max-w-3xl">
+                    Phase 2 replaces all placeholder results with a transparent, deterministic discrete-time thermal model tailored for Leh, Ladakh winter conditions (-18.2°C design low).
+                  </p>
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={() => setActiveTab('input')} className="px-4 py-2 rounded bg-cyan-500 text-slate-950 font-bold">Configure Inputs →</button>
+                    <button onClick={() => setActiveTab('simulation')} className="px-4 py-2 rounded bg-slate-800 border border-slate-700 text-slate-200">Run Simulation</button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <MetricCard label="Reference Region" value="Leh, Ladakh" unit="3,500m" subtext="Trans-Himalayas" accentColor="blue" />
+                  <MetricCard label="Simulation Status" value="Phase 2" unit="Deterministic" subtext="Euler dt = 3600s" accentColor="cyan" />
+                  <MetricCard label="Dimensions" value={`${inputs.lengthM}×${inputs.widthM}m`} unit={`${inputs.heightM}m H`} subtext={`Vol: ${(inputs.lengthM * inputs.widthM * inputs.heightM).toFixed(0)}m³`} accentColor="emerald" />
+                  <MetricCard label="Predicted Mean" value={`${currentResults.avgIndoorTempC}`} unit="°C" subtext={`Min: ${currentResults.minIndoorTempC}°C`} accentColor="amber" />
+                  <MetricCard label="Total Heat Loss" value={`${currentResults.totalHeatLossKWh}`} unit="kWh" subtext={`Solar: ${currentResults.totalSolarGainKWh} kWh`} accentColor="red" />
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SHELTER INPUT */}
+            {activeTab === 'input' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Shelter Envelope Input Configuration</h2>
+                    <p className="text-slate-400 text-[11px]">Inputs feed directly into Phase 2 deterministic ODE simulation.</p>
+                  </div>
+                  <button onClick={() => setActiveTab('simulation')} className="px-4 py-1.5 rounded bg-cyan-500 text-slate-950 font-bold">
+                    Go to Simulation →
+                  </button>
+                </div>
+
+                {validationErrors.length > 0 && (
+                  <div className="p-3 rounded bg-red-950 border border-red-800 text-red-300 space-y-1">
+                    <strong className="block">Validation Warning:</strong>
+                    {validationErrors.map((e, i) => <div key={i}>• {e}</div>)}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  <div className="lg:col-span-7 space-y-4">
+                    {/* Section A */}
+                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                      <span className="font-bold text-cyan-400 block uppercase">Section A — Geometry</span>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                          <div className="flex justify-between text-slate-400"><span>Length</span><span className="text-cyan-400 font-bold">{inputs.lengthM}m</span></div>
+                          <input type="range" min="2" max="15" step="0.2" value={inputs.lengthM} onChange={e => updateInput('lengthM', parseFloat(e.target.value) || 2)} className="w-full accent-cyan-400" />
+                        </div>
+                        <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                          <div className="flex justify-between text-slate-400"><span>Width</span><span className="text-cyan-400 font-bold">{inputs.widthM}m</span></div>
+                          <input type="range" min="2" max="10" step="0.2" value={inputs.widthM} onChange={e => updateInput('widthM', parseFloat(e.target.value) || 2)} className="w-full accent-cyan-400" />
+                        </div>
+                        <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                          <div className="flex justify-between text-slate-400"><span>Height</span><span className="text-cyan-400 font-bold">{inputs.heightM}m</span></div>
+                          <input type="range" min="2" max="4.5" step="0.1" value={inputs.heightM} onChange={e => updateInput('heightM', parseFloat(e.target.value) || 2)} className="w-full accent-cyan-400" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-300 mb-1">Orientation</label>
+                          <div className="grid grid-cols-4 gap-1">
+                            {['South', 'East', 'West', 'North'].map(o => (
+                              <button key={o} onClick={() => updateInput('orientation', o)} className={`py-1 rounded font-bold ${inputs.orientation === o ? 'bg-cyan-500 text-slate-950' : 'bg-slate-950 text-slate-400 border border-slate-800'}`}>{o}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 mb-1">Occupants ({inputs.occupants})</label>
+                          <input type="range" min="0" max="16" value={inputs.occupants} onChange={e => updateInput('occupants', parseInt(e.target.value) || 0)} className="w-full accent-cyan-400" />
+                          <span className="text-[10px] text-slate-400">+{inputs.occupants * 100}W internal sensible gain</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section B */}
+                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                      <span className="font-bold text-blue-400 block uppercase">Section B — Materials & Construction</span>
+                      <div>
+                        <label className="block text-slate-300 mb-1">Wall Material</label>
+                        <select value={inputs.wallMaterialId} onChange={e => updateInput('wallMaterialId', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-slate-200">
+                          {Object.values(WALL_MATERIALS).map(m => (
+                            <option key={m.id} value={m.id}>{m.name} — k={m.thermalConductivityK} W/mK (d={m.thicknessM}m)</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-1">Insulation Level</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {['Low', 'Medium', 'High'].map(lvl => (
+                            <button key={lvl} onClick={() => updateInput('insulationLevel', lvl)} className={`p-2 rounded border text-left ${inputs.insulationLevel === lvl ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
+                              <span className="font-bold block">{lvl}</span>
+                              <span className="text-[10px] text-slate-400">R = {INSULATION_GRADES[lvl].nominalR} m²K/W</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section C */}
+                    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                      <span className="font-bold text-amber-400 block uppercase">Section C — Glazing & Mass</span>
+                      <div>
+                        <div className="flex justify-between text-slate-300 mb-1"><span>Window Area</span><span className="text-cyan-400 font-bold">{inputs.windowAreaM2.toFixed(1)} m²</span></div>
+                        <input type="range" min="0" max="25" step="0.2" value={inputs.windowAreaM2} onChange={e => updateInput('windowAreaM2', parseFloat(e.target.value) || 0)} className="w-full accent-cyan-400" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-1">Glazing Type</label>
+                        <select value={inputs.glazingTypeId} onChange={e => updateInput('glazingTypeId', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-slate-200">
+                          {Object.values(GLAZING_OPTIONS).map(g => (
+                            <option key={g.id} value={g.id}>{g.name} — U={g.uValueWm2K} W/m²K, SHGC={g.shgc}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-300 mb-1">Thermal Mass (C)</label>
+                          <div className="grid grid-cols-3 gap-1">
+                            {['Low', 'Medium', 'High'].map(m => (
+                              <button key={m} onClick={() => updateInput('thermalMassLevel', m)} className={`py-1 rounded font-bold ${inputs.thermalMassLevel === m ? 'bg-cyan-500 text-slate-950' : 'bg-slate-950 text-slate-400 border border-slate-800'}`}>{m}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 mb-1">Air Leakage (ACH)</label>
+                          <div className="grid grid-cols-3 gap-1">
+                            {['Low', 'Medium', 'High'].map(l => (
+                              <button key={l} onClick={() => updateInput('airLeakageLevel', l)} className={`py-1 rounded font-bold ${inputs.airLeakageLevel === l ? 'bg-cyan-500 text-slate-950' : 'bg-slate-950 text-slate-400 border border-slate-800'}`}>{l}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-5 sticky top-28 space-y-3">
+                    <ShelterViewer2D inputs={inputs} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SIMULATION */}
+            {activeTab === 'simulation' && (
+              <div className="space-y-6 animate-fadeIn">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-white uppercase">Phase 2 Thermal Simulation Engine</h2>
+                    <p className="text-slate-400 text-[11px]">Deterministic discrete-time lumped-capacitance ODE step (dt = 3600s)</p>
+                  </div>
+                  <button onClick={handleRunSimulation} disabled={simulationState === 'running'} className="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold">
+                    {simulationState === 'running' ? 'Solving ODE...' : 'Run Simulation'}
+                  </button>
+                </div>
+
+                {/* Telemetry Console */}
+                <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+                  <div className="text-[11px] text-slate-400 font-bold uppercase">Solver Telemetry:</div>
+                  {simulationLogs.map((l, i) => <div key={i} className="text-[11px] text-slate-300">{l}</div>)}
+                </div>
+
+                {/* Section 16: 8 Key Metrics */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+                  <MetricCard label="Min Indoor" value={`${currentResults.minIndoorTempC}`} unit="°C" subtext="Overnight low" accentColor={currentResults.minIndoorTempC >= 0 ? 'emerald' : 'red'} />
+                  <MetricCard label="Max Indoor" value={`${currentResults.maxIndoorTempC}`} unit="°C" subtext="Noon peak" accentColor="amber" />
+                  <MetricCard label="Avg Indoor" value={`${currentResults.avgIndoorTempC}`} unit="°C" subtext="24h average" accentColor="cyan" />
+                  <MetricCard label="Min Outdoor" value={`${currentResults.minOutdoorTempC}`} unit="°C" subtext="Night low" accentColor="blue" />
+                  <MetricCard label="Max Outdoor" value={`${currentResults.maxOutdoorTempC}`} unit="°C" subtext="Day high" accentColor="blue" />
+                  <MetricCard label="Total Loss" value={`${currentResults.totalHeatLossKWh}`} unit="kWh" subtext="24h extraction" accentColor="red" />
+                  <MetricCard label="Total Solar" value={`${currentResults.totalSolarGainKWh}`} unit="kWh" subtext="24h harvest" accentColor="amber" />
+                  <MetricCard label="Max Loss W" value={`${currentResults.maxHourlyHeatLossW}`} unit="W" subtext="Peak power" accentColor="red" />
+                </div>
+
+                {/* Section 17 & 18: Charts */}
+                <TemperatureChart data={currentResults.hourlyData} />
+                <HeatBalanceChart data={currentResults.hourlyData} />
+
+                {/* Section 19: 13-Column Hourly Table */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-white uppercase">Section 19: Hourly Simulation Results Table</span>
+                    <button onClick={handleExportCSV} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700">Export CSV</button>
+                  </div>
+                  <div className="overflow-x-auto max-h-80 border border-slate-800 rounded">
+                    <table className="w-full text-left text-[11px] whitespace-nowrap">
+                      <thead className="bg-slate-950 text-slate-400 sticky top-0 uppercase">
+                        <tr>
+                          <th className="p-2">Hour</th>
+                          <th className="p-2">Outdoor</th>
+                          <th className="p-2">Indoor</th>
+                          <th className="p-2 text-amber-400">Solar Gain</th>
+                          <th className="p-2 text-emerald-400">Int Gain</th>
+                          <th className="p-2 text-sky-400">Wall Loss</th>
+                          <th className="p-2 text-indigo-400">Roof Loss</th>
+                          <th className="p-2 text-teal-400">Floor Loss</th>
+                          <th className="p-2 text-rose-400">Win Loss</th>
+                          <th className="p-2 text-purple-400">Vent Loss</th>
+                          <th className="p-2 text-amber-300">Total Gain</th>
+                          <th className="p-2 text-rose-300">Total Loss</th>
+                          <th className="p-2 text-cyan-300">Net Flow</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 bg-slate-900/40">
+                        {currentResults.hourlyData.map(r => (
+                          <tr key={r.hour} className="hover:bg-slate-800/40">
+                            <td className="p-2 font-bold text-slate-200">{r.timeLabel}</td>
+                            <td className="p-2 text-blue-400">{r.outdoorTempC}°C</td>
+                            <td className="p-2 font-bold text-cyan-300">{r.indoorTempC}°C</td>
+                            <td className="p-2 text-amber-400">{r.solarGainW}W</td>
+                            <td className="p-2 text-emerald-400">{r.internalGainW}W</td>
+                            <td className="p-2 text-sky-400">{r.wallLossW}W</td>
+                            <td className="p-2 text-indigo-400">{r.roofLossW}W</td>
+                            <td className="p-2 text-teal-400">{r.floorLossW}W</td>
+                            <td className="p-2 text-rose-400">{r.windowLossW}W</td>
+                            <td className="p-2 text-purple-400">{r.ventilationLossW}W</td>
+                            <td className="p-2 font-bold text-amber-300">{r.totalGainW}W</td>
+                            <td className="p-2 font-bold text-rose-300">{r.totalLossW}W</td>
+                            <td className="p-2 font-bold text-cyan-300">{r.netHeatFlowW >= 0 ? `+${r.netHeatFlowW}` : r.netHeatFlowW}W</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Section 23: Assumptions Panel */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2 text-[11px]">
+                  <span className="font-bold text-white uppercase block">Section 23: Model Assumptions Transparency</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-slate-300">
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800"><span>Location:</span> <strong className="text-white block">Leh (3,500m)</strong><span className="text-emerald-400 text-[10px]">Reference</span></div>
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800"><span>Scenario:</span> <strong className="text-white block">Mid-Winter Design</strong><span className="text-indigo-400 text-[10px]">Synthetic</span></div>
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800"><span>Model:</span> <strong className="text-white block">1R-1C ODE</strong><span className="text-amber-400 text-[10px]">Assumption</span></div>
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800"><span>Time Step:</span> <strong className="text-white block">1 Hour (3,600s)</strong><span className="text-amber-400 text-[10px]">Assumption</span></div>
+                    <div className="p-2 rounded bg-slate-950 border border-slate-800"><span>Period:</span> <strong className="text-white block">24 Hours</strong><span className="text-amber-400 text-[10px]">Assumption</span></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: OPTIMIZER (PHASE 3) */}
+            {activeTab === 'optimizer' && (() => {
+              const { baseline, candidates, recommended, top5 } = optimizationData;
+              let list = [...candidates];
+              if (optFilterOrient !== 'ALL') {
+                list = list.filter(c => c.inputs.orientation === optFilterOrient);
+              }
+              list.sort((a, b) => {
+                let vA = a[optSortField] || a.metrics[optSortField];
+                let vB = b[optSortField] || b.metrics[optSortField];
+                if (optSortField === 'rank') { vA = a.rank; vB = b.rank; }
+                return optSortOrder === 'asc' ? vA - vB : vB - vA;
+              });
+
+              return (
+                <div className="space-y-6 animate-fadeIn font-mono">
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="text-xl font-bold text-white uppercase">Passive Design Optimizer</h2>
+                        <span className="px-2.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 text-[10px]">Phase 3 Engine</span>
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">24 Evaluated</span>
+                      </div>
+                      <p className="text-slate-400 text-[11px] mt-0.5">Deterministic 24-hour simulation across passive archetypes for Leh, Ladakh winter conditions</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowTraceability(!showTraceability)} className="px-3 py-1.5 rounded bg-slate-800 text-slate-200 border border-slate-700 text-xs">
+                        {showTraceability ? 'Hide Traceability' : 'Traceability Details'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Section A: Baseline User Design Summary */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                      <span className="font-bold text-white uppercase text-xs">Section A: Baseline User Design ({inputs.designTitle})</span>
+                      <span className="text-[10px] text-slate-400">Footprint: {inputs.lengthM}m × {inputs.widthM}m × {inputs.heightM}m</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span className="text-slate-400 text-[10px] block">Orientation</span><strong className="text-cyan-300">{baseline.inputs.orientation}</strong></div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span className="text-slate-400 text-[10px] block">Insulation</span><strong className="text-emerald-400">{baseline.inputs.insulationLevel}</strong></div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span className="text-slate-400 text-[10px] block">Window</span><strong className="text-amber-400">{baseline.inputs.windowAreaM2} m²</strong></div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span className="text-slate-400 text-[10px] block">Loss (24h)</span><strong className="text-rose-400">{baseline.metrics.totalHeatLossKWh} kWh</strong></div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span className="text-slate-400 text-[10px] block">Avg Tin</span><strong className="text-white">{baseline.metrics.avgIndoorTempC}°C</strong></div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span className="text-slate-400 text-[10px] block">Score</span><strong className="text-blue-400">{baseline.metrics.overallScore} / 100</strong></div>
+                    </div>
+                  </div>
+
+                  {/* Section B/C: Recommended Design Card */}
+                  <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40 border-2 border-cyan-500/50 p-5 shadow-2xl space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 border-b border-slate-800 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded bg-cyan-500 text-slate-950 font-bold text-[10px] uppercase">Rank #1 • Recommended</span>
+                          <span className="text-[11px] text-cyan-300">Recommended configuration for the selected representative cold-region scenario</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mt-1">{recommended.name}</h3>
+                        <p className="text-xs text-slate-300">{recommended.tagline}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 uppercase block">Prototype Thermal Score</span>
+                          <span className="text-2xl font-bold text-cyan-400">{recommended.metrics.overallScore}</span><span className="text-xs text-slate-400">/100</span>
+                        </div>
+                        <button onClick={applyRecommended} className="px-4 py-2 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20">
+                          Apply Recommended
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Dynamic Explanation */}
+                    <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5">
+                      <span className="text-[11px] font-bold text-white uppercase block">Why This Design Was Recommended:</span>
+                      {recommended.recommendationReasoning.map((r, i) => (
+                        <div key={i} className="text-xs text-slate-300 flex items-start gap-2">
+                          <span className="text-cyan-400 font-bold">•</span>
+                          <span>{r}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Calculated Metrics Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
+                      <div className="p-2.5 bg-slate-950 rounded border border-slate-800"><span className="text-[10px] text-slate-400 block">Min Tin</span><strong className="text-cyan-300 text-sm">{recommended.metrics.minIndoorTempC}°C</strong></div>
+                      <div className="p-2.5 bg-slate-950 rounded border border-slate-800"><span className="text-[10px] text-slate-400 block">Max Tin</span><strong className="text-cyan-300 text-sm">{recommended.metrics.maxIndoorTempC}°C</strong></div>
+                      <div className="p-2.5 bg-slate-950 rounded border border-slate-800"><span className="text-[10px] text-slate-400 block">Average Tin</span><strong className="text-white text-sm">{recommended.metrics.avgIndoorTempC}°C</strong></div>
+                      <div className="p-2.5 bg-slate-950 rounded border border-slate-800"><span className="text-[10px] text-slate-400 block">Total Loss</span><strong className="text-rose-300 text-sm">{recommended.metrics.totalHeatLossKWh} kWh</strong></div>
+                      <div className="p-2.5 bg-slate-950 rounded border border-slate-800"><span className="text-[10px] text-slate-400 block">Solar Harvest</span><strong className="text-amber-300 text-sm">{recommended.metrics.totalSolarGainKWh} kWh</strong></div>
+                      <div className="p-2.5 bg-slate-950 rounded border border-slate-800"><span className="text-[10px] text-slate-400 block">Heating Proxy</span><strong className="text-emerald-300 text-sm">{recommended.metrics.heatingDemandProxyKWh} kWh</strong></div>
+                    </div>
+                  </div>
+
+                  {/* Section D: Comparison Charts */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div className="lg:col-span-7">
+                      <OptimizerTempChart baselineData={baseline.simulation.hourlyData} recommendedData={recommended.simulation.hourlyData} />
+                    </div>
+                    <div className="lg:col-span-5">
+                      <LossComparisonBarChart baselineSim={baseline.simulation} recommendedSim={recommended.simulation} />
+                    </div>
+                  </div>
+
+                  {/* Section F: Top 5 Configurations */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                      <span className="font-bold text-white uppercase text-xs">Section F: Top 5 Candidate Configurations</span>
+                      <span className="text-xs text-cyan-400 font-bold">Rank #1 is Marked Recommended</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 text-xs">
+                      {top5.map(c => (
+                        <div key={c.id} className={`p-3 rounded-lg border flex flex-col justify-between space-y-2 ${c.isRecommended ? 'bg-cyan-950/40 border-cyan-500/60' : 'bg-slate-950 border-slate-800'}`}>
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${c.isRecommended ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>
+                                {c.isRecommended ? '★ Rec' : `#${c.rank}`}
+                              </span>
+                              <strong className="text-white">{c.metrics.overallScore}</strong>
+                            </div>
+                            <h4 className="font-bold text-slate-200 truncate">{c.name}</h4>
+                            <div className="text-[10px] text-slate-400 mt-1 space-y-0.5">
+                              <div>Loss: <strong className="text-rose-300">{c.metrics.totalHeatLossKWh} kWh</strong></div>
+                              <div>Solar: <strong className="text-amber-300">{c.metrics.totalSolarGainKWh} kWh</strong></div>
+                              <div>Avg Tin: <strong className="text-cyan-300">{c.metrics.avgIndoorTempC}°C</strong></div>
+                              <div>Heat Req: <strong className="text-emerald-300">{c.metrics.heatingDemandProxyKWh} kWh</strong></div>
+                            </div>
+                          </div>
+                          <button onClick={() => applyCandidate(c)} className={`w-full py-1 rounded text-[10px] font-bold ${c.isRecommended ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}>
+                            Apply
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Section G: Complete Interactive Candidates Table */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl space-y-2">
+                    <div className="p-3 border-b border-slate-800 flex justify-between items-center flex-wrap gap-2">
+                      <span className="font-bold text-white uppercase text-xs">Section G: All 24 Evaluated Candidates</span>
+                      <div className="flex gap-1 text-[11px]">
+                        {['ALL', 'South', 'East', 'West', 'North'].map(o => (
+                          <button key={o} onClick={() => setOptFilterOrient(o)} className={`px-2 py-0.5 rounded ${optFilterOrient === o ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>{o}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto max-h-80">
+                      <table className="w-full text-left text-xs whitespace-nowrap">
+                        <thead className="bg-slate-950 text-slate-400 sticky top-0 uppercase text-[10px]">
+                          <tr>
+                            <th className="p-2.5">Rank</th>
+                            <th className="p-2.5">Title</th>
+                            <th className="p-2.5">Orient</th>
+                            <th className="p-2.5">Wall</th>
+                            <th className="p-2.5">Insulation</th>
+                            <th className="p-2.5">Window</th>
+                            <th className="p-2.5 text-right">Loss (kWh)</th>
+                            <th className="p-2.5 text-right">Solar (kWh)</th>
+                            <th className="p-2.5 text-right">Avg Tin</th>
+                            <th className="p-2.5 text-right">Heat Req</th>
+                            <th className="p-2.5 text-right">Score</th>
+                            <th className="p-2.5 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800 bg-slate-900/40">
+                          {list.map(c => (
+                            <tr key={c.id} className={c.isRecommended ? 'bg-cyan-950/30' : 'hover:bg-slate-800/40'}>
+                              <td className="p-2.5 font-bold text-cyan-400">#{c.rank}</td>
+                              <td className="p-2.5 font-bold text-slate-200">{c.name}</td>
+                              <td className="p-2.5 text-cyan-300">{c.inputs.orientation}</td>
+                              <td className="p-2.5 text-slate-300">{WALL_MATERIALS[c.inputs.wallMaterialId]?.name.split('(')[0]}</td>
+                              <td className="p-2.5 text-slate-300">{c.inputs.insulationLevel}</td>
+                              <td className="p-2.5 text-amber-400 font-bold">{c.inputs.windowAreaM2} m²</td>
+                              <td className="p-2.5 text-right text-rose-300">{c.metrics.totalHeatLossKWh}</td>
+                              <td className="p-2.5 text-right text-amber-300">{c.metrics.totalSolarGainKWh}</td>
+                              <td className="p-2.5 text-right text-cyan-300 font-bold">{c.metrics.avgIndoorTempC}°C</td>
+                              <td className="p-2.5 text-right text-emerald-300">{c.metrics.heatingDemandProxyKWh}</td>
+                              <td className="p-2.5 text-right font-bold text-white">{c.metrics.overallScore}</td>
+                              <td className="p-2.5 text-right">
+                                <button onClick={() => applyCandidate(c)} className="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px]">
+                                  Apply
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Section H: Traceability Inspector */}
+                  {showTraceability && (
+                    <div className="p-4 bg-slate-900 border border-cyan-500/40 rounded-xl space-y-2 text-xs">
+                      <span className="font-bold text-cyan-400 uppercase block">Section H: Traceability & Physics Details</span>
+                      <div className="grid grid-cols-2 gap-4 text-[11px] text-slate-300">
+                        <div className="p-2.5 bg-slate-950 rounded border border-slate-800 space-y-1">
+                          <span className="text-white font-bold block">Recommended Conductances:</span>
+                          <div>Wall U: {recommended.simulation.envelopeUValues.uWallWm2K} W/m²K</div>
+                          <div>Roof U: {recommended.simulation.envelopeUValues.uRoofWm2K} W/m²K</div>
+                          <div>Window U: {recommended.simulation.envelopeUValues.uWindowWm2K} W/m²K</div>
+                          <div>Capacitance: {(recommended.simulation.effectiveThermalCapacitanceJK / 1000).toFixed(0)} kJ/K</div>
+                        </div>
+                        <div className="p-2.5 bg-slate-950 rounded border border-slate-800 space-y-1">
+                          <span className="text-white font-bold block">Prototype Weight Contributions:</span>
+                          <div>Thermal Condition (25%): {(recommended.metrics.scoreComponents.thermalCondition * 100).toFixed(0)}%</div>
+                          <div>Heat Loss (25%): {(recommended.metrics.scoreComponents.heatLoss * 100).toFixed(0)}%</div>
+                          <div>Stability (15%): {(recommended.metrics.scoreComponents.temperatureStability * 100).toFixed(0)}%</div>
+                          <div>Solar (15%): {(recommended.metrics.scoreComponents.solarGain * 100).toFixed(0)}%</div>
+                          <div>Heating Demand (20%): {(recommended.metrics.scoreComponents.heatingDemand * 100).toFixed(0)}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* TAB: RESULTS */}
+            {activeTab === 'results' && (() => {
+              const { recommended, baseline } = optimizationData;
+              return (
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <h2 className="text-lg font-bold text-white uppercase">Thermal Simulation Summary (Section 20)</h2>
+                    <div className="flex gap-2">
+                      <button onClick={() => window.print()} className="px-3 py-1 rounded bg-slate-800 border border-slate-700 text-cyan-300">Print Report</button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                    <span className="font-bold text-white uppercase block">Calculated Outputs:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">Indoor Range</span>
+                        <strong className="text-cyan-300 text-base">{currentResults.minIndoorTempC}°C to {currentResults.maxIndoorTempC}°C</strong>
+                      </div>
+                      <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">Average Indoor</span>
+                        <strong className="text-white text-base">{currentResults.avgIndoorTempC}°C</strong>
+                      </div>
+                      <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">Solar Contribution</span>
+                        <strong className="text-amber-400 text-base">{currentResults.totalSolarGainKWh} kWh/day</strong>
+                      </div>
+                      <div className="p-2.5 rounded bg-slate-950 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] block">Capacitance (C)</span>
+                        <strong className="text-purple-300 text-base">{(currentResults.effectiveThermalCapacitanceJK / 1000).toFixed(0)} kJ/K</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phase 3 Optimizer Recommendation Synthesis */}
+                  <div className="rounded-xl bg-gradient-to-r from-slate-900 to-cyan-950/40 border border-cyan-500/50 p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="px-2 py-0.5 rounded bg-cyan-500 text-slate-950 font-bold text-[10px] uppercase">Optimizer Recommendation</span>
+                        <h3 className="font-bold text-white text-sm mt-1">{recommended.name}</h3>
+                      </div>
+                      <button onClick={applyRecommended} className="px-3 py-1 rounded bg-cyan-500 text-slate-950 font-bold text-xs">
+                        Apply to Active
+                      </button>
+                    </div>
+                    <div className="p-2.5 bg-slate-950 rounded border border-slate-800 space-y-1 text-xs text-slate-300">
+                      {recommended.recommendationReasoning.map((r, i) => (
+                        <div key={i}>• {r}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span>Score:</span> <strong className="text-cyan-400 block">{recommended.metrics.overallScore}</strong> (Base: {baseline.metrics.overallScore})</div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span>Loss:</span> <strong className="text-rose-300 block">{recommended.metrics.totalHeatLossKWh} kWh</strong> (Base: {baseline.metrics.totalHeatLossKWh})</div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span>Solar:</span> <strong className="text-amber-300 block">{recommended.metrics.totalSolarGainKWh} kWh</strong> (Base: {baseline.metrics.totalSolarGainKWh})</div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span>Min Tin:</span> <strong className="text-cyan-300 block">{recommended.metrics.minIndoorTempC}°C</strong> (Base: {baseline.metrics.minIndoorTempC}°C)</div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800"><span>Heating Req:</span> <strong className="text-emerald-300 block">{recommended.metrics.heatingDemandProxyKWh} kWh</strong> (Base: {baseline.metrics.heatingDemandProxyKWh})</div>
+                    </div>
+                  </div>
+
+                  {/* Section 21: Honest Thermal Comfort Evaluation */}
+                  <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-2">
+                    <strong className="text-amber-400 uppercase block font-bold">Thermal Comfort Evaluation (Section 21)</strong>
+                    <div className="p-2.5 rounded bg-amber-950/40 border border-amber-500/30 text-amber-200 font-semibold">
+                      "Comfort evaluation requires the selected comfort methodology and associated personal/environmental inputs."
+                    </div>
+                    <p className="text-slate-300 leading-relaxed text-[11px]">
+                      Standard building physics dictates that comfort cannot be represented as an arbitrary single score. Phase 2 & 3 provide physical temperatures and fluxes required to connect an ASHRAE 55 PMV/PPD model.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* TAB: ASSUMPTIONS */}
+            {activeTab === 'assumptions' && (
+              <div className="space-y-6 animate-fadeIn">
+                <h2 className="text-lg font-bold text-white uppercase">Central Assumptions Catalog (Section 2 & 23)</h2>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+                  {Object.entries(CENTRAL_ASSUMPTIONS).map(([k, item]) => {
+                    if (item.value !== undefined) {
+                      return (
+                        <div key={k} className="p-2 rounded bg-slate-950 border border-slate-800 flex justify-between items-center">
+                          <div>
+                            <strong className="text-slate-200">{k}: </strong>
+                            <span className="text-cyan-300 font-bold">{item.value} {item.unit}</span>
+                            <span className="text-slate-400 text-[11px] block">{item.description}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.source.includes('Prototype assumption') ? 'text-amber-400 bg-amber-950 border border-amber-800' : 'text-emerald-400 bg-emerald-950 border border-emerald-800'}`}>
+                            {item.source}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+
+                {/* Section 23 Optimization Assumptions Table */}
+                <div className="bg-slate-900 border border-cyan-500/40 rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-white uppercase text-xs">Section 23: Passive Optimizer Multi-Objective Weights</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">Prototype Assumptions</span>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span>Thermal Condition (Higher Avg/Min Tin):</span><strong className="text-cyan-400">25% (0.25)</strong>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span>Cumulative Heat Loss (Lower Total kWh):</span><strong className="text-cyan-400">25% (0.25)</strong>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span>Diurnal Temperature Stability (Lower Swing ΔT):</span><strong className="text-cyan-400">15% (0.15)</strong>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span>Useful Solar Gain Harvest (Higher Solar kWh):</span><strong className="text-cyan-400">15% (0.15)</strong>
+                    </div>
+                    <div className="p-2 bg-slate-950 rounded border border-slate-800 flex justify-between">
+                      <span>Active Heating Demand Proxy (Lower Supplemental kWh):</span><strong className="text-cyan-400">20% (0.20)</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+
+          <footer className="bg-slate-950 border-t border-slate-900 py-3 px-4 text-[11px] text-slate-400 flex justify-between">
+            <span>ThermoShelter Phase 2 • Deterministic Lumped Thermal Engine</span>
+            <span>Leh, Ladakh Reference Scenario</span>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
